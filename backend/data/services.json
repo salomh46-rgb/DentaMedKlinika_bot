@@ -1,0 +1,173 @@
+[
+  {
+    "id": 100,
+    "department": "stomatology",
+    "category": {
+      "uz": "Diagnostika",
+      "ru": "Диагностика"
+    },
+    "title": {
+      "uz": "Shifokor Ko'rigi + 3D Rentgen Diagnostika",
+      "ru": "Осмотр Врача + 3D Рентген Диагностика"
+    },
+    "desc": {
+      "uz": "Tish og'rig'i manbaini 5 daqiqada 100% aniqlash va davolash rejasini tuzish",
+      "ru": "Точное определение источника зубной боли за 5 минут и план лечения"
+    },
+    "price": 0,
+    "duration": 20,
+    "isPopular": true
+  },
+  {
+    "id": 101,
+    "department": "stomatology",
+    "category": {
+      "uz": "Terapevtik",
+      "ru": "Терапия"
+    },
+    "title": {
+      "uz": "Estetik Plomba va Kariesni davolash",
+      "ru": "Эстетическая пломба и лечение кариеса"
+    },
+    "desc": {
+      "uz": "Nemis kompozit materiallari bilan og'riqsiz tishni tiklash",
+      "ru": "Безболезненное восстановление зуба немецкими композитами"
+    },
+    "price": 350000,
+    "duration": 40,
+    "isPopular": true
+  },
+  {
+    "id": 102,
+    "department": "stomatology",
+    "category": {
+      "uz": "Implantatsiya",
+      "ru": "Имплантация"
+    },
+    "title": {
+      "uz": "Koreya / Shveytsariya Implanti (Osstem/Straumann)",
+      "ru": "Имплантация Корея / Швейцария (Osstem/Straumann)"
+    },
+    "desc": {
+      "uz": "Umrlik kafolatga ega, eng yuqori darajada ilashuvchi implantlar",
+      "ru": "Премиум импланты с пожизненной гарантией приживаемости"
+    },
+    "price": 3200000,
+    "duration": 60,
+    "isPopular": true
+  },
+  {
+    "id": 103,
+    "department": "stomatology",
+    "category": {
+      "uz": "Ortodontiya",
+      "ru": "Ортодонтия"
+    },
+    "title": {
+      "uz": "Keramik / Metall Breket o'rnatish",
+      "ru": "Установка металлических / керамических брекетов"
+    },
+    "desc": {
+      "uz": "Tish qatorini to'g'rilash va chiroyli tabassum yaratish",
+      "ru": "Исправление прикуса и создание идеальной улыбки"
+    },
+    "price": 4500000,
+    "duration": 50,
+    "isPopular": false
+  },
+  {
+    "id": 104,
+    "department": "stomatology",
+    "category": {
+      "uz": "Gigiyena",
+      "ru": "Гигиена"
+    },
+    "title": {
+      "uz": "Ultrasonik tozalash + AirFlow oqartirish",
+      "ru": "Ультразвуковая чистка + AirFlow отбеливание"
+    },
+    "desc": {
+      "uz": "Toshlar va blyashkalarni tozalash, 2-3 tonna tabiiy oqartirish",
+      "ru": "Удаление зубного камня, налета и осветление на 2-3 тона"
+    },
+    "price": 400000,
+    "duration": 35,
+    "isPopular": true
+  },
+  {
+    "id": 201,
+    "department": "lor",
+    "category": {
+      "uz": "Diagnostika",
+      "ru": "Диагностика"
+    },
+    "title": {
+      "uz": "LOR-Kombayn Video-Endoskopik Ko'rik",
+      "ru": "Видео-эндоскопический осмотр на ЛОР-комбайне"
+    },
+    "desc": {
+      "uz": "Quloq, tomoq va burun bo'shlig'ini 4K mikrokamera orqali 100% aniq ko'rish",
+      "ru": "Сверхточный осмотр уха, горла и носа через 4K микрокамеру"
+    },
+    "price": 180000,
+    "duration": 25,
+    "isPopular": true
+  },
+  {
+    "id": 202,
+    "department": "lor",
+    "category": {
+      "uz": "Muolaja",
+      "ru": "Процедуры"
+    },
+    "title": {
+      "uz": "Gaymoritni punksiyasiz (Kukushka) davolash",
+      "ru": "Беспункционное лечение гайморита («Кукушка»)"
+    },
+    "desc": {
+      "uz": "Burun bo'shliqlarini vakuumli dorilar bilan yuvish va nafasni ochish",
+      "ru": "Вакуумное промывание пазух носа антисептиками без прокола"
+    },
+    "price": 150000,
+    "duration": 20,
+    "isPopular": true
+  },
+  {
+    "id": 203,
+    "department": "lor",
+    "category": {
+      "uz": "Muolaja",
+      "ru": "Процедуры"
+    },
+    "title": {
+      "uz": "Tonzillorni yuvish (Surunkali angina/tonzillit)",
+      "ru": "Промывание миндалин на аппарате Тонзиллор"
+    },
+    "desc": {
+      "uz": "Tomoq og'rig'i va hidni yo'qotuvchi chuqur ultratovushli tozalash",
+      "ru": "Глубокое ультразвуковое очищение миндалин от пробок"
+    },
+    "price": 120000,
+    "duration": 20,
+    "isPopular": false
+  },
+  {
+    "id": 204,
+    "department": "lor",
+    "category": {
+      "uz": "Bolalar LOR",
+      "ru": "Детский ЛОР"
+    },
+    "title": {
+      "uz": "Bolalar Adenoid va Eshitish qobiliyati testi",
+      "ru": "Тест слуха и диагностика аденоидов у детей"
+    },
+    "desc": {
+      "uz": "Bolaning tinch nafas olishi va eshitishini tiklash diagnostikasi",
+      "ru": "Комплексная проверка слуха и проходимости носового дыхания"
+    },
+    "price": 220000,
+    "duration": 30,
+    "isPopular": true
+  }
+]

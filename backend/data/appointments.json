@@ -1,0 +1,156 @@
+[
+  {
+    "id": "MED-453422",
+    "pinCode": "4148",
+    "patientName": "Jasper",
+    "phone": "+998 4676466464",
+    "doctor": {
+      "id": 1,
+      "name": "Dr. Jamshid Rustamov",
+      "specialty": {
+        "uz": "Bosh Stomatolog-Implantolog",
+        "ru": "Главный Стоматолог-Имплантолог"
+      },
+      "department": "stomatology",
+      "experience": 12,
+      "rating": 4.95,
+      "reviewsCount": 342,
+      "photo": "/images/doctors/dr_jamshid.jpg",
+      "availableDays": [
+        "Dush",
+        "Sesh",
+        "Chor",
+        "Pay",
+        "Jum"
+      ]
+    },
+    "service": {
+      "id": 101,
+      "department": "stomatology",
+      "category": {
+        "uz": "Terapevtik",
+        "ru": "Терапия"
+      },
+      "title": {
+        "uz": "Estetik Plomba va Kariesni davolash",
+        "ru": "Эстетическая пломба и лечение кариеса"
+      },
+      "desc": {
+        "uz": "Nemis kompozit materiallari bilan og'riqsiz tishni tiklash",
+        "ru": "Безболезненное восстановление зуба немецкими композитами"
+      },
+      "price": 350000,
+      "duration": 40,
+      "isPopular": true
+    },
+    "date": "2026-09-09",
+    "time": "10:30",
+    "status": "confirmed",
+    "notes": "",
+    "createdAt": "2026-09-08T07:39:29.209Z",
+    "telegramUserId": 1320855100,
+    "telegramUsername": "Dr_eviluz"
+  },
+  {
+    "id": "MED-503129",
+    "pinCode": "4196",
+    "patientName": "Jasper",
+    "phone": "+998 905083302",
+    "doctor": {
+      "id": 2,
+      "name": "Dr. Shahlo Karimova",
+      "specialty": {
+        "uz": "Ortodont (Breket & Eylayner)",
+        "ru": "Ортодонт (Брекеты и Элайнеры)"
+      },
+      "department": "stomatology",
+      "experience": 9,
+      "rating": 4.92,
+      "reviewsCount": 285,
+      "photo": "/images/doctors/dr_shahlo.jpg",
+      "availableDays": [
+        "Dush",
+        "Chor",
+        "Jum",
+        "Shan"
+      ]
+    },
+    "service": {
+      "id": 104,
+      "department": "stomatology",
+      "category": {
+        "uz": "Gigiyena",
+        "ru": "Гигиена"
+      },
+      "title": {
+        "uz": "Ultrasonik tozalash + AirFlow oqartirish",
+        "ru": "Ультразвуковая чистка + AirFlow отбеливание"
+      },
+      "desc": {
+        "uz": "Toshlar va blyashkalarni tozalash, 2-3 tonna tabiiy oqartirish",
+        "ru": "Удаление зубного камня, налета и осветление на 2-3 тона"
+      },
+      "price": 400000,
+      "duration": 35,
+      "isPopular": true
+    },
+    "date": "2026-09-09",
+    "time": "14:00",
+    "status": "confirmed",
+    "notes": "Xh CNN",
+    "createdAt": "2026-09-08T07:25:20.401Z",
+    "telegramUserId": 1320855100,
+    "telegramUsername": "Dr_eviluz"
+  },
+  {
+    "id": "MED-562324",
+    "pinCode": "9355",
+    "patientName": "Jasper",
+    "phone": "+998 905083302",
+    "doctor": {
+      "id": 2,
+      "name": "Dr. Shahlo Karimova",
+      "specialty": {
+        "uz": "Ortodont (Breket & Eylayner)",
+        "ru": "Ортодонт (Брекеты и Элайнеры)"
+      },
+      "department": "stomatology",
+      "experience": 9,
+      "rating": 4.92,
+      "reviewsCount": 285,
+      "photo": "/images/doctors/dr_shahlo.jpg",
+      "availableDays": [
+        "Dush",
+        "Chor",
+        "Jum",
+        "Shan"
+      ]
+    },
+    "service": {
+      "id": 101,
+      "department": "stomatology",
+      "category": {
+        "uz": "Terapevtik",
+        "ru": "Терапия"
+      },
+      "title": {
+        "uz": "Estetik Plomba va Kariesni davolash",
+        "ru": "Эстетическая пломба и лечение кариеса"
+      },
+      "desc": {
+        "uz": "Nemis kompozit materiallari bilan og'riqsiz tishni tiklash",
+        "ru": "Безболезненное восстановление зуба немецкими композитами"
+      },
+      "price": 350000,
+      "duration": 40,
+      "isPopular": true
+    },
+    "date": "2026-09-10",
+    "time": "15:30",
+    "status": "confirmed",
+    "notes": "",
+    "createdAt": "2026-09-08T07:05:28.183Z",
+    "telegramUserId": 1320855100,
+    "telegramUsername": "Dr_eviluz"
+  }
+]

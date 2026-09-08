@@ -1,0 +1,58 @@
+[
+  {
+    "id": 1,
+    "name": "Dr. Jamshid Rustamov",
+    "specialty": {
+      "uz": "Bosh Stomatolog-Implantolog",
+      "ru": "Главный Стоматолог-Имплантолог"
+    },
+    "department": "stomatology",
+    "experience": 12,
+    "rating": 4.95,
+    "reviewsCount": 342,
+    "photo": "/images/doctors/dr_jamshid.jpg",
+    "availableDays": ["Dush", "Sesh", "Chor", "Pay", "Jum"]
+  },
+  {
+    "id": 2,
+    "name": "Dr. Shahlo Karimova",
+    "specialty": {
+      "uz": "Ortodont (Breket & Eylayner)",
+      "ru": "Ортодонт (Брекеты и Элайнеры)"
+    },
+    "department": "stomatology",
+    "experience": 9,
+    "rating": 4.92,
+    "reviewsCount": 285,
+    "photo": "/images/doctors/dr_shahlo.jpg",
+    "availableDays": ["Dush", "Chor", "Jum", "Shan"]
+  },
+  {
+    "id": 3,
+    "name": "Dr. Bobur Mahmudov",
+    "specialty": {
+      "uz": "Oliy toifali LOR-Jarroh (Endoskopiya)",
+      "ru": "ЛОР-Хирург высшей категории (Эндоскопия)"
+    },
+    "department": "lor",
+    "experience": 15,
+    "rating": 4.98,
+    "reviewsCount": 412,
+    "photo": "/images/doctors/dr_bobur.jpg",
+    "availableDays": ["Sesh", "Pay", "Shan"]
+  },
+  {
+    "id": 4,
+    "name": "Dr. Dilnoza Alimova",
+    "specialty": {
+      "uz": "Bolalar LOR Shifokori & Audiolog",
+      "ru": "Детский ЛОР-Врач и Audiolog"
+    },
+    "department": "lor",
+    "experience": 8,
+    "rating": 4.88,
+    "reviewsCount": 198,
+    "photo": "/images/doctors/dr_dilnoza.jpg",
+    "availableDays": ["Dush", "Sesh", "Chor", "Pay", "Jum", "Shan"]
+  }
+]

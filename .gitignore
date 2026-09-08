@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Build output
+dist/
+frontend/dist/
+dist-ssr/
+
+# Environment & Secrets
+.env
+backend/.env
+*.env
+
+# Large Binaries & Executables
+*.exe
+backend/*.exe
+
+# Python cache & virtual environments
+__pycache__/
+backend/__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Logs & OS artifacts
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
