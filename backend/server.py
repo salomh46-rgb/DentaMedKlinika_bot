@@ -18,8 +18,7 @@ if sys.platform == "win32":
         pass
 
 load_dotenv()
-
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8520791524:AAF8Y5jt6R-fIDS4DXPiRWGpFNN8Quqsung")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "")
 
 DATA_DIR = Path(__file__).parent / "data"
