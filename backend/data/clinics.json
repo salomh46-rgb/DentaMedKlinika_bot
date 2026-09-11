@@ -1,0 +1,30 @@
+[
+  {
+    "id": "dentamed-nukus",
+    "name": "DentaMed Atelier (Nukus - Bosh filial)",
+    "isMain": true,
+    "address": "Toshkent shahar, Mirobod tumani, Nukus ko'chasi, 24-uy",
+    "landmark": "Rossiya elchixonasi ro'parasi, 204-kabinet",
+    "phone": "+998 (71) 200-00-00",
+    "workingHours": "24/7 (Kechasi ham shoshilinch qabul)",
+    "location": {
+      "lat": 41.2995,
+      "lng": 69.2401
+    },
+    "mapUrl": "https://maps.google.com/?q=41.2995,69.2401"
+  },
+  {
+    "id": "dentamed-chilonzor",
+    "name": "DentaMed Chilonzor filiali",
+    "isMain": false,
+    "address": "Toshkent shahar, Chilonzor tumani, Bunyodkor shox ko'chasi, 42-uy",
+    "landmark": "Novza metro bekati, Korzinka yonida, 102-kabinet",
+    "phone": "+998 (71) 200-03-03",
+    "workingHours": "08:00 - 21:00 (Har kuni)",
+    "location": {
+      "lat": 41.2858,
+      "lng": 69.2042
+    },
+    "mapUrl": "https://maps.google.com/?q=41.2858,69.2042"
+  }
+]

@@ -1,4 +1,43 @@
-import { Doctor, Service, ToothData, BeforeAfterItem } from '../types';
+import { Doctor, Service, ToothData, BeforeAfterItem, Clinic, ClinicId, Appointment } from '../types';
+
+export const CLINICS: Clinic[] = [
+  {
+    id: 'nukus',
+    name: 'DentaMed Atelier',
+    branchName: {
+      uz: 'Nukus filiali',
+      ru: 'Нукусский филиал'
+    },
+    address: {
+      uz: "Toshkent shahar, Mirobod tumani, Nukus ko'chasi, 24-uy (Sirk ro'parasi)",
+      ru: 'г. Ташкент, Мирабадский р-н, ул. Нукусская, 24'
+    },
+    phone: '+998 (71) 200-00-00',
+    workingHours: {
+      uz: 'Dush-Shan: 09:00 - 20:00 • Yak: 10:00 - 16:00',
+      ru: 'Пн-Сб: 09:00 - 20:00 • Вс: 10:00 - 16:00'
+    },
+    badge: 'Atelier Flagship'
+  },
+  {
+    id: 'chilonzor',
+    name: 'DentaMed Elite',
+    branchName: {
+      uz: 'Chilonzor filiali',
+      ru: 'Чиланзарский филиал'
+    },
+    address: {
+      uz: "Toshkent shahar, Chilonzor tumani, Bunyodkor shoh ko'chasi, 42-uy (Metro Mirzo Ulug'bek)",
+      ru: 'г. Ташкент, Чиланзарский р-н, пр-т Бунёдкор, 42 (м. Мирзо Улугбек)'
+    },
+    phone: '+998 (71) 200-11-22',
+    workingHours: {
+      uz: 'Dush-Yak: 08:30 - 21:00 (Dam olishsiz)',
+      ru: 'Пн-Вс: 08:30 - 21:00 (Без выходных)'
+    },
+    badge: 'Elite Center'
+  }
+];
 
 export const DOCTORS: Doctor[] = [
   {
@@ -13,7 +52,8 @@ export const DOCTORS: Doctor[] = [
     rating: 4.95,
     reviewsCount: 342,
     photo: '/images/doctors/dr_jamshid.jpg',
-    availableDays: ['Dush', 'Sesh', 'Chor', 'Pay', 'Jum']
+    availableDays: ['Dush', 'Sesh', 'Chor', 'Pay', 'Jum'],
+    clinicIds: ['nukus', 'chilonzor']
   },
   {
     id: 2,
@@ -27,7 +67,8 @@ export const DOCTORS: Doctor[] = [
     rating: 4.92,
     reviewsCount: 285,
     photo: '/images/doctors/dr_shahlo.jpg',
-    availableDays: ['Dush', 'Chor', 'Jum', 'Shan']
+    availableDays: ['Dush', 'Chor', 'Jum', 'Shan'],
+    clinicIds: ['chilonzor']
   },
   {
     id: 3,
@@ -41,7 +82,8 @@ export const DOCTORS: Doctor[] = [
     rating: 4.98,
     reviewsCount: 412,
     photo: '/images/doctors/dr_bobur.jpg',
-    availableDays: ['Sesh', 'Pay', 'Shan']
+    availableDays: ['Sesh', 'Pay', 'Shan'],
+    clinicIds: ['nukus']
   },
   {
     id: 4,
@@ -55,7 +97,8 @@ export const DOCTORS: Doctor[] = [
     rating: 4.88,
     reviewsCount: 198,
     photo: '/images/doctors/dr_dilnoza.jpg',
-    availableDays: ['Dush', 'Sesh', 'Chor', 'Pay', 'Jum', 'Shan']
+    availableDays: ['Dush', 'Sesh', 'Chor', 'Pay', 'Jum', 'Shan'],
+    clinicIds: ['nukus', 'chilonzor']
   }
 ];
 
@@ -78,7 +121,8 @@ export const SERVICES: Service[] = [
     },
     price: 0,
     duration: 20,
-    isPopular: true
+    isPopular: true,
+    clinicIds: ['nukus', 'chilonzor']
   },
   {
     id: 101,
@@ -97,7 +141,8 @@ export const SERVICES: Service[] = [
     },
     price: 350000,
     duration: 40,
-    isPopular: true
+    isPopular: true,
+    clinicIds: ['nukus', 'chilonzor']
   },
   {
     id: 102,
@@ -116,7 +161,8 @@ export const SERVICES: Service[] = [
     },
     price: 3200000,
     duration: 60,
-    isPopular: true
+    isPopular: true,
+    clinicIds: ['nukus']
   },
   {
     id: 103,
@@ -135,7 +181,8 @@ export const SERVICES: Service[] = [
     },
     price: 4500000,
     duration: 50,
-    isPopular: false
+    isPopular: false,
+    clinicIds: ['chilonzor']
   },
   {
     id: 104,
@@ -154,7 +201,8 @@ export const SERVICES: Service[] = [
     },
     price: 400000,
     duration: 35,
-    isPopular: true
+    isPopular: true,
+    clinicIds: ['nukus', 'chilonzor']
   },
 
   // LOR
@@ -175,7 +223,8 @@ export const SERVICES: Service[] = [
     },
     price: 180000,
     duration: 25,
-    isPopular: true
+    isPopular: true,
+    clinicIds: ['nukus']
   },
   {
     id: 202,
@@ -194,7 +243,8 @@ export const SERVICES: Service[] = [
     },
     price: 150000,
     duration: 20,
-    isPopular: true
+    isPopular: true,
+    clinicIds: ['nukus', 'chilonzor']
   },
   {
     id: 203,
@@ -213,7 +263,8 @@ export const SERVICES: Service[] = [
     },
     price: 120000,
     duration: 20,
-    isPopular: false
+    isPopular: false,
+    clinicIds: ['nukus', 'chilonzor']
   },
   {
     id: 204,
@@ -574,3 +625,106 @@ export const TIME_SLOTS = [
   '09:00', '09:45', '10:30', '11:15', '12:00',
   '14:00', '14:45', '15:30', '16:15', '17:00'
 ];
+
+export const INITIAL_RECEPTION_APPOINTMENTS: Appointment[] = [
+  {
+    id: 'MED-849201',
+    pinCode: '8492',
+    patientName: 'Jasur Rahimov',
+    phone: '+998 90 123 45 67',
+    doctor: DOCTORS[0], // Dr. Jamshid Rustamov
+    service: {
+      id: 101,
+      department: 'stomatology',
+      category: { uz: 'Terapevtik', ru: 'Терапия' },
+      title: { uz: 'Estetik Plomba va Kariesni davolash', ru: 'Эстетическая пломба и лечение кариеса' },
+      desc: { uz: 'Nemis kompozit materiallari bilan', ru: 'Немецкие композиты' },
+      price: 350000,
+      duration: 40
+    },
+    date: new Date().toISOString().split('T')[0],
+    time: '10:30',
+    status: 'waiting',
+    selectedTeethNumbers: [14, 15],
+    hasPromoUltrasonic: true,
+    totalAmount: 550000,
+    clinicId: 'nukus',
+    notes: 'Yuqori o\'ng tishda sovuq suv ichganda kuchli og\'riq sezilmoqda',
+    createdAt: new Date(Date.now() - 3600000 * 2).toISOString()
+  },
+  {
+    id: 'MED-715302',
+    pinCode: '7153',
+    patientName: 'Madina Usmonova',
+    phone: '+998 93 456 78 90',
+    doctor: DOCTORS[1], // Dr. Shahlo Karimova
+    service: {
+      id: 104,
+      department: 'stomatology',
+      category: { uz: 'Ortodontiya', ru: 'Ортодонтия' },
+      title: { uz: 'Ortodontik Diagnostika va Eylayner', ru: 'Ортодонтическая Диагностика' },
+      desc: { uz: '3D skanerlash va breket tekshiruvi', ru: '3D сканирование' },
+      price: 450000,
+      duration: 30
+    },
+    date: new Date().toISOString().split('T')[0],
+    time: '11:15',
+    status: 'in_progress',
+    selectedTeethNumbers: [21, 22],
+    hasPromoUltrasonic: false,
+    totalAmount: 450000,
+    clinicId: 'chilonzor',
+    notes: 'Breket rejalashtirish, yuqori tishlar qatori qiyshiqligi',
+    createdAt: new Date(Date.now() - 3600000 * 3).toISOString()
+  },
+  {
+    id: 'MED-632190',
+    pinCode: '6321',
+    patientName: 'Otabek Mirzayev',
+    phone: '+998 97 789 01 23',
+    doctor: DOCTORS[2], // Dr. Bobur Mahmudov
+    service: {
+      id: 200,
+      department: 'lor',
+      category: { uz: 'Diagnostika', ru: 'Диагностика' },
+      title: { uz: 'Video-Endoskopik LOR Ko\'rik (HD)', ru: 'Видео-Эндоскопический ЛОР Осмотр (HD)' },
+      desc: { uz: 'Nemis Karl Storz uskunasi', ru: 'Karl Storz' },
+      price: 180000,
+      duration: 25
+    },
+    date: new Date().toISOString().split('T')[0],
+    time: '09:45',
+    status: 'completed',
+    hasPromoUltrasonic: false,
+    totalAmount: 180000,
+    clinicId: 'nukus',
+    notes: 'Surunkali gaymorit, burundan nafas olish qiyinlashuvi',
+    createdAt: new Date(Date.now() - 3600000 * 4).toISOString()
+  },
+  {
+    id: 'MED-551048',
+    pinCode: '5510',
+    patientName: 'Dilshod Normatov',
+    phone: '+998 99 321 65 47',
+    doctor: DOCTORS[0], // Dr. Jamshid Rustamov
+    service: {
+      id: 102,
+      department: 'stomatology',
+      category: { uz: 'Jarrohlik', ru: 'Хирургия' },
+      title: { uz: 'Premium Shveysariya Implantatsiyasi (Straumann)', ru: 'Швейцарская Имплантация Straumann' },
+      desc: { uz: 'Umrlik kafolatli titan implant', ru: 'Пожизненная гарантия' },
+      price: 4500000,
+      duration: 60
+    },
+    date: new Date().toISOString().split('T')[0],
+    time: '09:00',
+    status: 'no_show',
+    selectedTeethNumbers: [46],
+    hasPromoUltrasonic: false,
+    totalAmount: 4500000,
+    clinicId: 'nukus',
+    notes: 'Telefon ko\'tarmadi, kelmadi',
+    createdAt: new Date(Date.now() - 3600000 * 5).toISOString()
+  }
+];
+

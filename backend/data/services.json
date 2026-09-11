@@ -16,7 +16,8 @@
     },
     "price": 0,
     "duration": 20,
-    "isPopular": true
+    "isPopular": true,
+    "clinicId": "dentamed-nukus"
   },
   {
     "id": 101,
@@ -35,7 +36,8 @@
     },
     "price": 350000,
     "duration": 40,
-    "isPopular": true
+    "isPopular": true,
+    "clinicId": "dentamed-chilonzor"
   },
   {
     "id": 102,
@@ -54,7 +56,8 @@
     },
     "price": 3200000,
     "duration": 60,
-    "isPopular": true
+    "isPopular": true,
+    "clinicId": "dentamed-nukus"
   },
   {
     "id": 103,
@@ -73,7 +76,8 @@
     },
     "price": 4500000,
     "duration": 50,
-    "isPopular": false
+    "isPopular": false,
+    "clinicId": "dentamed-chilonzor"
   },
   {
     "id": 104,
@@ -92,7 +96,8 @@
     },
     "price": 400000,
     "duration": 35,
-    "isPopular": true
+    "isPopular": true,
+    "clinicId": "dentamed-nukus"
   },
   {
     "id": 201,
@@ -111,7 +116,8 @@
     },
     "price": 180000,
     "duration": 25,
-    "isPopular": true
+    "isPopular": true,
+    "clinicId": "dentamed-chilonzor"
   },
   {
     "id": 202,
@@ -130,7 +136,8 @@
     },
     "price": 150000,
     "duration": 20,
-    "isPopular": true
+    "isPopular": true,
+    "clinicId": "dentamed-nukus"
   },
   {
     "id": 203,
@@ -149,7 +156,8 @@
     },
     "price": 120000,
     "duration": 20,
-    "isPopular": false
+    "isPopular": false,
+    "clinicId": "dentamed-chilonzor"
   },
   {
     "id": 204,
@@ -168,6 +176,7 @@
     },
     "price": 220000,
     "duration": 30,
-    "isPopular": true
+    "isPopular": true,
+    "clinicId": "dentamed-nukus"
   }
 ]

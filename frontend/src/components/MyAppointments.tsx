@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Language, Appointment } from '../types';
-import { Calendar, Clock, QrCode, AlertCircle, XCircle, BellRing, PhoneCall, ShieldCheck, MapPin, User, Info } from 'lucide-react';
+import { Calendar, Clock, QrCode, AlertCircle, XCircle, BellRing, PhoneCall, ShieldCheck, MapPin, User, Info, Ticket } from 'lucide-react';
+import { DigitalTicketModal } from './DigitalTicketModal';
 
 interface MyAppointmentsProps {
   lang: Language;
@@ -15,6 +16,7 @@ export const MyAppointments: React.FC<MyAppointmentsProps> = ({
   onCancel,
   onBookNew
 }) => {
+  const [selectedTicketAppt, setSelectedTicketAppt] = useState<Appointment | null>(null);
   if (appointments.length === 0) {
     return (
       <div className="bg-white dark:bg-[#0E231B] rounded-3xl p-8 border border-[#E8E2D8] dark:border-[#183F32] text-center space-y-4 shadow-sm">
@@ -145,13 +147,24 @@ export const MyAppointments: React.FC<MyAppointmentsProps> = ({
 
             {/* Actions */}
             <div className="pt-2 border-t border-[#E8E2D8] dark:border-[#183F32] flex items-center justify-between gap-2">
-              <a
-                href="tel:+998712000000"
-                className="flex items-center gap-1.5 text-xs font-semibold text-[#1A221E] dark:text-[#FAF8F5] bg-[#FAF8F5] dark:bg-[#0A1D16] hover:border-[#C5A880] border border-[#E8E2D8] dark:border-[#183F32] px-3.5 py-2 rounded-full transition"
-              >
-                <PhoneCall className="w-3.5 h-3.5 text-[#C5A880]" />
-                <span>{lang === 'uz' ? 'Qo\'ng\'iroq' : 'Связь'}</span>
-              </a>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setSelectedTicketAppt(app)}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-[#112E24] dark:text-[#07130F] bg-[#C5A880] hover:bg-[#D6BF9F] px-3.5 py-2 rounded-full transition shadow-xs"
+                  title={lang === 'uz' ? 'Raqamli kvitansiya / QR-bron chiptasi' : 'Электронный талон / QR-билет'}
+                >
+                  <Ticket className="w-3.5 h-3.5" />
+                  <span>{lang === 'uz' ? 'Chipta (QR)' : 'Талон (QR)'}</span>
+                </button>
+
+                <a
+                  href="tel:+998712000000"
+                  className="flex items-center gap-1.5 text-xs font-semibold text-[#1A221E] dark:text-[#FAF8F5] bg-[#FAF8F5] dark:bg-[#0A1D16] hover:border-[#C5A880] border border-[#E8E2D8] dark:border-[#183F32] px-3 py-2 rounded-full transition"
+                >
+                  <PhoneCall className="w-3.5 h-3.5 text-[#C5A880]" />
+                  <span>{lang === 'uz' ? 'Qo\'ng\'iroq' : 'Связь'}</span>
+                </a>
+              </div>
 
               <button
                 onClick={() => onCancel(app.id)}
@@ -164,6 +177,14 @@ export const MyAppointments: React.FC<MyAppointmentsProps> = ({
           </div>
         ))}
       </div>
+
+      {/* Digital Receipt / QR Boarding Pass Modal */}
+      <DigitalTicketModal
+        lang={lang}
+        isOpen={!!selectedTicketAppt}
+        onClose={() => setSelectedTicketAppt(null)}
+        appointment={selectedTicketAppt}
+      />
     </div>
   );
 };

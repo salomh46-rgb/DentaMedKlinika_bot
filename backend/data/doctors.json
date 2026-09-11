@@ -11,7 +11,18 @@
     "rating": 4.95,
     "reviewsCount": 342,
     "photo": "/images/doctors/dr_jamshid.jpg",
-    "availableDays": ["Dush", "Sesh", "Chor", "Pay", "Jum"]
+    "availableDays": [
+      "Dush",
+      "Sesh",
+      "Chor",
+      "Pay",
+      "Jum"
+    ],
+    "branch": "nukus",
+    "branches": [
+      "nukus"
+    ],
+    "clinicId": "dentamed-nukus"
   },
   {
     "id": 2,
@@ -25,7 +36,17 @@
     "rating": 4.92,
     "reviewsCount": 285,
     "photo": "/images/doctors/dr_shahlo.jpg",
-    "availableDays": ["Dush", "Chor", "Jum", "Shan"]
+    "availableDays": [
+      "Dush",
+      "Chor",
+      "Jum",
+      "Shan"
+    ],
+    "branch": "chilonzor",
+    "branches": [
+      "chilonzor"
+    ],
+    "clinicId": "dentamed-nukus"
   },
   {
     "id": 3,
@@ -39,7 +60,16 @@
     "rating": 4.98,
     "reviewsCount": 412,
     "photo": "/images/doctors/dr_bobur.jpg",
-    "availableDays": ["Sesh", "Pay", "Shan"]
+    "availableDays": [
+      "Sesh",
+      "Pay",
+      "Shan"
+    ],
+    "branch": "nukus",
+    "branches": [
+      "nukus"
+    ],
+    "clinicId": "dentamed-chilonzor"
   },
   {
     "id": 4,
@@ -53,6 +83,18 @@
     "rating": 4.88,
     "reviewsCount": 198,
     "photo": "/images/doctors/dr_dilnoza.jpg",
-    "availableDays": ["Dush", "Sesh", "Chor", "Pay", "Jum", "Shan"]
+    "availableDays": [
+      "Dush",
+      "Sesh",
+      "Chor",
+      "Pay",
+      "Jum",
+      "Shan"
+    ],
+    "branch": "chilonzor",
+    "branches": [
+      "chilonzor"
+    ],
+    "clinicId": "dentamed-chilonzor"
   }
 ]

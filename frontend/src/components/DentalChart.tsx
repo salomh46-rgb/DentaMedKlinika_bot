@@ -1,21 +1,45 @@
 import React, { useState } from 'react';
 import { Language, ToothData, JawQuadrant, ToothType } from '../types';
 import { INITIAL_TEETH } from '../data/mockData';
-import { Info, CheckCircle2, AlertCircle, Sparkles, Calendar, HelpCircle, Compass, Search, Stethoscope, MapPin } from 'lucide-react';
+import { Info, CheckCircle2, AlertCircle, Sparkles, Calendar, HelpCircle, Compass, Search, Stethoscope, MapPin, X, Percent } from 'lucide-react';
 import { InteractiveJawModel } from './InteractiveJawModel';
 import { LuxuryToothIcon, QuadrantArrowIcon } from './LuxuryIcons';
 
 interface DentalChartProps {
   lang: Language;
-  onBookTooth: (tooth: ToothData) => void;
+  onBookTooth: (
+    tooth: ToothData,
+    additionalTeeth?: ToothData[],
+    includePromo?: boolean,
+    promoDiscount?: number,
+    totalPrice?: number
+  ) => void;
 }
 
 export const DentalChart: React.FC<DentalChartProps> = ({ lang, onBookTooth }) => {
   const [teeth] = useState<ToothData[]>(INITIAL_TEETH);
   // Default selected tooth is 46 (Katta oziq tish - lower arch)
   const [selectedTooth, setSelectedTooth] = useState<ToothData | null>(INITIAL_TEETH[18]); // Tooth #46 (Molar)
+  const [selectedTeeth, setSelectedTeeth] = useState<ToothData[]>([INITIAL_TEETH[18]]); // Multi-selection support
   const [activeArch, setActiveArch] = useState<'minimal' | 'upper' | 'lower' | 'photo'>('minimal');
   const [hoveredTooth, setHoveredTooth] = useState<ToothData | null>(null);
+
+  // 1-Tashrif Onboarding Banner / Tooltip State
+  const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
+    return localStorage.getItem('dentamed_chart_onboarding') !== 'done';
+  });
+
+  // Cross-Promo State: '2 ta tish davolansa, ultratovushli tozalash 50% chegirmada!'
+  const [includePromoUltrasonic, setIncludePromoUltrasonic] = useState<boolean>(true);
+
+  const ULTRASONIC_ORIGINAL_PRICE = 400000;
+  const ULTRASONIC_PROMO_PRICE = 200000; // 50% chegirma
+  const ULTRASONIC_DISCOUNT_AMOUNT = 200000;
+
+  const isPromoEligible = selectedTeeth.length >= 2;
+  const teethSubtotal = selectedTeeth.reduce((acc, t) => acc + (t.price || 350000), 0);
+  const discountAmount = isPromoEligible && includePromoUltrasonic ? ULTRASONIC_DISCOUNT_AMOUNT : 0;
+  const totalWithPromo = teethSubtotal + (isPromoEligible && includePromoUltrasonic ? ULTRASONIC_PROMO_PRICE : 0);
 
   const getConditionColor = (cond: ToothData['condition'], isSelected: boolean) => {
     if (isSelected) {
@@ -68,27 +92,52 @@ export const DentalChart: React.FC<DentalChartProps> = ({ lang, onBookTooth }) =
   const handleSelectZone = (zone: 'upper_right' | 'upper_left' | 'lower_right' | 'lower_left' | 'front') => {
     setIsUnknownMode(false);
     setActiveArch('minimal');
-    if (zone === 'upper_right') {
-      const t = teeth.find(x => x.number === 16);
-      if (t) setSelectedTooth(t);
-    } else if (zone === 'upper_left') {
-      const t = teeth.find(x => x.number === 26);
-      if (t) setSelectedTooth(t);
-    } else if (zone === 'lower_right') {
-      const t = teeth.find(x => x.number === 46);
-      if (t) setSelectedTooth(t);
-    } else if (zone === 'lower_left') {
-      const t = teeth.find(x => x.number === 36);
-      if (t) setSelectedTooth(t);
-    } else if (zone === 'front') {
-      const t = teeth.find(x => x.number === 11);
-      if (t) setSelectedTooth(t);
+    let targetNum = 46;
+    if (zone === 'upper_right') targetNum = 16;
+    else if (zone === 'upper_left') targetNum = 26;
+    else if (zone === 'lower_right') targetNum = 46;
+    else if (zone === 'lower_left') targetNum = 36;
+    else if (zone === 'front') targetNum = 11;
+
+    const t = teeth.find(x => x.number === targetNum);
+    if (t) {
+      setSelectedTooth(t);
+      setSelectedTeeth([t]);
     }
   };
 
   const handleToothSelectedFromModel = (tooth: ToothData) => {
     setIsUnknownMode(false);
     setSelectedTooth(tooth);
+    setSelectedTeeth(prev => {
+      const exists = prev.some(t => t.number === tooth.number);
+      if (exists) {
+        if (prev.length === 1) return prev;
+        return prev.filter(t => t.number !== tooth.number);
+      } else {
+        return [...prev, tooth];
+      }
+    });
+  };
+
+  const handleRemoveTooth = (toothNumber: number) => {
+    if (selectedTeeth.length <= 1) return;
+    const nextList = selectedTeeth.filter(t => t.number !== toothNumber);
+    setSelectedTeeth(nextList);
+    if (selectedTooth?.number === toothNumber) {
+      setSelectedTooth(nextList[0] || null);
+    }
+  };
+
+  const handleBookCurrentPlan = () => {
+    const mainTooth = selectedTooth || selectedTeeth[0] || INITIAL_TEETH[18];
+    onBookTooth(
+      mainTooth,
+      selectedTeeth,
+      isPromoEligible && includePromoUltrasonic,
+      discountAmount,
+      totalWithPromo
+    );
   };
 
   const activeTooth = hoveredTooth || selectedTooth;
@@ -113,11 +162,59 @@ export const DentalChart: React.FC<DentalChartProps> = ({ lang, onBookTooth }) =
               </p>
             </div>
           </div>
-          <span className="bg-[#112E24]/5 dark:bg-[#183F32] text-[#112E24] dark:text-[#FAF8F5] text-[9.5px] font-semibold px-2.5 py-1 rounded-full border border-[#C5A880]/30 tracking-wider uppercase">
-            {lang === 'uz' ? 'Atelier Xarita' : 'Atelier Карта'}
-          </span>
+          <button
+            onClick={() => setShowOnboarding(v => !v)}
+            className="flex items-center gap-1 bg-[#112E24]/5 dark:bg-[#183F32] hover:bg-[#112E24]/10 text-[#112E24] dark:text-[#FAF8F5] text-[10px] font-semibold px-2.5 py-1 rounded-full border border-[#C5A880]/30 tracking-wider transition"
+            title={lang === 'uz' ? "Yo'riqnomani ko'rish" : 'Показать инструкцию'}
+          >
+            <Sparkles className="w-3 h-3 text-[#C5A880]" />
+            <span>{lang === 'uz' ? "Yo'riqnoma 👆" : 'Гид 👆'}</span>
+          </button>
         </div>
       </div>
+
+      {/* 1-Tashrif Onboarding Banner / Tooltip */}
+      {showOnboarding && (
+        <div className="bg-gradient-to-r from-[#112E24] via-[#183F32] to-[#112E24] text-[#FAF8F5] p-4 rounded-3xl border border-[#C5A880]/50 shadow-lg relative overflow-hidden animate-fadeIn">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-[#C5A880]/20 border border-[#C5A880]/40 flex items-center justify-center text-[#C5A880] flex-shrink-0">
+                <Sparkles className="w-5 h-5 text-[#C5A880] animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="bg-[#C5A880] text-[#112E24] text-[9.5px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                    {lang === 'uz' ? "1-Tashrif Yo'riqnomasi" : 'Гид для 1-го визита'}
+                  </span>
+                  <span className="text-[10px] text-[#D6BF9F]">
+                    {lang === 'uz' ? '32 ta tish anatomiyasi' : 'Анатомия 32 зубов'}
+                  </span>
+                </div>
+                <h4 className="font-serif font-bold text-sm text-[#FAF8F5] mt-1">
+                  {lang === 'uz'
+                    ? "Davolamoqchi bo'lgan tishingizni tanlang 👆 (32 ta tish anatomiyasi)"
+                    : 'Выберите зуб, который хотите вылечить 👆 (Анатомия 32 зубов)'}
+                </h4>
+                <p className="text-[11.5px] text-[#D6BF9F] mt-1 font-light leading-relaxed">
+                  {lang === 'uz'
+                    ? "Interaktiv jag' modelida har bir tish ustiga bosing. 2 yoki undan ortiq tish tanlansa, maxsus ultratovushli tozalash 50% chegirmasi avtomatik hisoblanadi!"
+                    : 'Нажмите на зуб на модели челюсти. При выборе 2 и более зубов автоматически рассчитывается скидка 50% на ультразвуковую чистку!'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setShowOnboarding(false);
+                localStorage.setItem('dentamed_chart_onboarding', 'done');
+              }}
+              className="text-[#D6BF9F] hover:text-white p-1 rounded-full bg-white/10 hover:bg-white/20 transition flex-shrink-0"
+              title={lang === 'uz' ? 'Tushundim (Yopish)' : 'Понятно (Закрыть)'}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 1. Quick Zone Navigation (4 ta Jag' Qismi & Oldingi Tishlar) */}
       <div className="bg-[#FAF8F5] dark:bg-[#0A1D16] p-3.5 sm:p-4 rounded-3xl border border-[#E8E2D8] dark:border-[#183F32] space-y-3">
@@ -235,17 +332,183 @@ export const DentalChart: React.FC<DentalChartProps> = ({ lang, onBookTooth }) =
         </div>
       </div>
 
+      {/* Floating Pointer Indicator */}
+      <div className="flex items-center justify-between bg-[#112E24]/5 dark:bg-[#183F32]/50 px-3.5 py-2 rounded-2xl border border-[#C5A880]/30 text-xs">
+        <span className="text-[#112E24] dark:text-[#FAF8F5] font-medium flex items-center gap-2">
+          <span className="animate-bounce">👆</span>
+          <span>
+            {lang === 'uz'
+              ? "Davolamoqchi bo'lgan tishingizni tanlang (32 ta tish anatomiyasi)"
+              : 'Выберите зуб для лечения (Анатомия 32 зубов)'}
+          </span>
+        </span>
+        <span className="text-[10px] text-[#C5A880] font-bold bg-[#112E24] dark:bg-[#07130F] px-2 py-0.5 rounded-full">
+          {selectedTeeth.length} {lang === 'uz' ? 'tish tanlandi' : 'зуб(ов)'}
+        </span>
+      </div>
+
       {/* 2. Real Anatomical Interactive Jaw Model */}
       <InteractiveJawModel
         lang={lang}
         teeth={teeth}
         selectedTooth={isUnknownMode ? null : selectedTooth}
+        selectedTeeth={selectedTeeth}
         onSelectTooth={handleToothSelectedFromModel}
         activeArch={activeArch}
         onChangeArch={setActiveArch}
       />
 
-      {/* 3. SCENARIO A: Reassuring Diagnostic Card when patient doesn't know exact tooth */}
+      {/* Selected Teeth Badges Bar */}
+      {selectedTeeth.length > 0 && !isUnknownMode && (
+        <div className="bg-[#FAF8F5] dark:bg-[#0A1D16] p-3 rounded-2xl border border-[#E8E2D8] dark:border-[#183F32] space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-semibold text-[#112E24] dark:text-[#FAF8F5] flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-[#C5A880]" />
+              <span>{lang === 'uz' ? 'Davolash rejasidagi tishlar:' : 'Выбранные зубы для лечения:'}</span>
+            </span>
+            <span className="text-[10px] text-[#627068] dark:text-[#9FB1A7]">
+              {lang === 'uz' ? "Ko'proq tish qo'shish uchun modelni bosing" : 'Нажмите на модель чтобы добавить'}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            {selectedTeeth.map(t => (
+              <div
+                key={t.number}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition ${
+                  selectedTooth?.number === t.number
+                    ? 'bg-[#112E24] text-[#FAF8F5] border-[#C5A880]'
+                    : 'bg-white dark:bg-[#0E231B] text-[#1A221E] dark:text-[#FAF8F5] border-[#E8E2D8] dark:border-[#183F32]'
+                }`}
+              >
+                <button
+                  onClick={() => setSelectedTooth(t)}
+                  className="hover:underline font-mono font-bold text-[#C5A880]"
+                >
+                  №{t.number}
+                </button>
+                <span className="text-[10px] opacity-80 truncate max-w-[90px]">
+                  {lang === 'uz' ? t.name.uz.split(' ')[0] : t.name.ru.split(' ')[0]}
+                </span>
+                {selectedTeeth.length > 1 && (
+                  <button
+                    onClick={() => handleRemoveTooth(t.number)}
+                    className="hover:text-rose-500 p-0.5 ml-0.5"
+                    title={lang === 'uz' ? "O'chirish" : 'Удалить'}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 3. KROSS-AKSIYA VA CHEGIRMA KALKULYATORI (Talab 3) */}
+      {isPromoEligible && !isUnknownMode && (
+        <div className="bg-gradient-to-br from-[#112E24] via-[#183F32] to-[#0A1D16] text-[#FAF8F5] rounded-3xl p-5 shadow-xl border-2 border-[#C5A880]/60 space-y-4 animate-fadeIn">
+          {/* Header */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-2xl bg-[#C5A880] text-[#112E24] flex items-center justify-center font-bold shadow-md flex-shrink-0">
+                <Percent className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="bg-[#C5A880] text-[#112E24] text-[9.5px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  {lang === 'uz' ? 'Kross-Aksiya Faollashdi' : 'Кросс-Акция Активирована'}
+                </span>
+                <h4 className="font-serif font-bold text-sm text-[#FAF8F5] mt-0.5">
+                  {lang === 'uz'
+                    ? '2 ta tish davolansa, ultratovushli tozalash 50% chegirmada!'
+                    : 'При лечении 2 зубов — ультразвуковая чистка со скидкой 50%!'}
+                </h4>
+              </div>
+            </div>
+          </div>
+
+          {/* Calculator Table */}
+          <div className="bg-black/25 rounded-2xl p-3.5 border border-[#C5A880]/30 space-y-2 text-xs">
+            <div className="flex items-center justify-between text-[#D6BF9F]">
+              <span>
+                {lang === 'uz'
+                  ? `Tanlangan tishlar (${selectedTeeth.length} ta):`
+                  : `Выбранные зубы (${selectedTeeth.length}):`}
+              </span>
+              <span className="font-semibold text-white">
+                {teethSubtotal.toLocaleString('uz-UZ')} {lang === 'uz' ? "so'm" : 'сум'}
+              </span>
+            </div>
+
+            {/* Promo item toggle */}
+            <div className="pt-2 border-t border-white/10 flex items-center justify-between">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={includePromoUltrasonic}
+                  onChange={e => setIncludePromoUltrasonic(e.target.checked)}
+                  className="w-4 h-4 rounded text-[#C5A880] focus:ring-0 bg-white/20 border-white/30"
+                />
+                <span className="text-xs">
+                  {lang === 'uz'
+                    ? 'Ultratovushli tozalash + AirFlow (50% chegirma)'
+                    : 'Ультразвуковая чистка + AirFlow (-50%)'}
+                </span>
+              </label>
+              <div className="text-right">
+                {includePromoUltrasonic ? (
+                  <div>
+                    <span className="text-[10px] text-white/50 line-through mr-1.5">
+                      {ULTRASONIC_ORIGINAL_PRICE.toLocaleString('uz-UZ')}
+                    </span>
+                    <span className="font-bold text-[#C5A880]">
+                      {ULTRASONIC_PROMO_PRICE.toLocaleString('uz-UZ')} {lang === 'uz' ? "so'm" : 'сум'}
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-white/50 text-[11px]">{lang === 'uz' ? "Qo'shilmagan" : 'Не выбрано'}</span>
+                )}
+              </div>
+            </div>
+
+            {/* Savings Badge */}
+            {includePromoUltrasonic && (
+              <div className="bg-[#C5A880]/20 border border-[#C5A880]/40 p-2 rounded-xl flex items-center justify-between text-[11px] text-[#D6BF9F]">
+                <span className="flex items-center gap-1 font-medium">
+                  <Sparkles className="w-3.5 h-3.5 text-[#C5A880]" />
+                  <span>{lang === 'uz' ? 'Sizning tejamkoringiz:' : 'Ваша экономия:'}</span>
+                </span>
+                <span className="font-bold text-[#C5A880]">
+                  -{ULTRASONIC_DISCOUNT_AMOUNT.toLocaleString('uz-UZ')} {lang === 'uz' ? "so'm (50%)" : 'сум (50%)'}
+                </span>
+              </div>
+            )}
+
+            {/* Final Total */}
+            <div className="pt-2 border-t border-white/10 flex items-center justify-between font-bold text-sm">
+              <span className="text-white">{lang === 'uz' ? 'Jami qabul narxi:' : 'Итоговая стоимость:'}</span>
+              <span className="font-serif text-base text-[#C5A880]">
+                {totalWithPromo.toLocaleString('uz-UZ')} {lang === 'uz' ? "so'm" : 'сум'}
+              </span>
+            </div>
+          </div>
+
+          {/* Action CTA with Promo */}
+          <button
+            onClick={handleBookCurrentPlan}
+            className="w-full bg-[#C5A880] hover:bg-[#D6BF9F] active:scale-98 text-[#112E24] font-bold text-xs py-3.5 rounded-full flex items-center justify-center gap-2 shadow-lg transition-all"
+          >
+            <Calendar className="w-4 h-4 text-[#112E24]" />
+            <span>
+              {lang === 'uz'
+                ? `Aksiya bilan qabulga yozilish (${totalWithPromo.toLocaleString('uz-UZ')} so'm)`
+                : `Записаться по акции (${totalWithPromo.toLocaleString('uz-UZ')} сум)`}
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* 4. SCENARIO A: Reassuring Diagnostic Card when patient doesn't know exact tooth */}
       {isUnknownMode ? (
         <div className="bg-[#112E24] text-[#FAF8F5] rounded-3xl p-5 shadow-xl border border-[#C5A880]/30 animate-fadeIn space-y-4">
           <div className="flex items-start gap-3.5">
@@ -357,7 +620,7 @@ export const DentalChart: React.FC<DentalChartProps> = ({ lang, onBookTooth }) =
         </div>
       ) : (
         /* SCENARIO B: Specific Tooth Detail Box (Patient-Friendly Description) */
-        activeTooth && (
+        activeTooth && !isPromoEligible && (
           <div className="bg-[#112E24] text-[#FAF8F5] rounded-3xl p-5 shadow-xl border border-[#C5A880]/30 animate-fadeIn space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
               <div className="flex items-start gap-3.5">
@@ -417,7 +680,7 @@ export const DentalChart: React.FC<DentalChartProps> = ({ lang, onBookTooth }) =
 
             {activeTooth.condition !== 'healthy' && activeTooth.condition !== 'missing' && (
               <button
-                onClick={() => onBookTooth(activeTooth)}
+                onClick={() => handleBookCurrentPlan()}
                 className="w-full bg-[#C5A880] hover:bg-[#D6BF9F] active:scale-98 text-[#112E24] font-bold text-xs py-3 rounded-full flex items-center justify-center gap-2 shadow-md transition-all"
               >
                 <Calendar className="w-4 h-4 text-[#112E24]" />

@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { Language, Doctor, Service, Appointment } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Language, Doctor, Service, Appointment, ClinicId } from '../types';
 import { DOCTORS, SERVICES, TIME_SLOTS } from '../data/mockData';
-import { X, Calendar, Clock, User, Phone, CheckCircle, ArrowRight, ArrowLeft } from 'lucide-react';
+import { X, Calendar, Clock, User, Phone, CheckCircle, ArrowRight, ArrowLeft, Lock } from 'lucide-react';
 import { showTelegramAlert } from '../utils/telegramAlerts';
+import { fetchBusySlots } from '../services/api';
 
 interface BookingModalProps {
   lang: Language;
@@ -11,6 +12,11 @@ interface BookingModalProps {
   onSuccess: (newAppointment: Appointment) => void;
   preselectedDoctor?: Doctor | null;
   preselectedService?: Service | null;
+  selectedTeethNumbers?: number[];
+  hasPromoUltrasonic?: boolean;
+  discountAmount?: number;
+  totalPrice?: number;
+  selectedClinicId?: ClinicId;
 }
 
 export const BookingModal: React.FC<BookingModalProps> = ({
@@ -19,13 +25,18 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   onClose,
   onSuccess,
   preselectedDoctor,
-  preselectedService
+  preselectedService,
+  selectedTeethNumbers = [],
+  hasPromoUltrasonic = false,
+  discountAmount = 0,
+  totalPrice,
+  selectedClinicId = 'nukus'
 }) => {
-  if (!isOpen) return null;
-
   const [step, setStep] = useState<number>(1);
   const [doctor, setDoctor] = useState<Doctor>(preselectedDoctor || DOCTORS[0]);
   const [service, setService] = useState<Service>(preselectedService || SERVICES[0]);
+  const [busySlots, setBusySlots] = useState<string[]>([]);
+  const [isLoadingSlots, setIsLoadingSlots] = useState<boolean>(false);
   
   // Date calculations: Start strictly from Tomorrow to prevent accidental 'today' booking
   const formatDateISO = (d: Date) => d.toISOString().split('T')[0];
@@ -49,6 +60,34 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
   const [selectedDate, setSelectedDate] = useState<string>(tomorrowStr);
   const [selectedTime, setSelectedTime] = useState<string>(TIME_SLOTS[2]); // '10:30'
+
+  // Fetch busy slots whenever doctor, date or clinicId changes
+  useEffect(() => {
+    if (!isOpen) return;
+    let isCurrent = true;
+    setIsLoadingSlots(true);
+    fetchBusySlots(doctor.id, selectedDate, selectedClinicId)
+      .then(slots => {
+        if (!isCurrent) return;
+        setBusySlots(slots);
+        setSelectedTime(curr => {
+          if (slots.includes(curr)) {
+            const firstAvailable = TIME_SLOTS.find(s => !slots.includes(s));
+            return firstAvailable || curr;
+          }
+          return curr;
+        });
+      })
+      .finally(() => {
+        if (isCurrent) setIsLoadingSlots(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [doctor.id, selectedDate, selectedClinicId, isOpen]);
+
+
 
   const [patientName, setPatientName] = useState<string>(() => {
     const tg = window.Telegram?.WebApp?.initDataUnsafe?.user;
@@ -102,6 +141,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     }
   ];
 
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
   const handlePhoneChange = (val: string) => {
     if (!val.startsWith('+998')) {
       setPhone('+998 ');
@@ -110,7 +151,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     }
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!patientName.trim()) {
       showTelegramAlert(lang === 'uz' ? 'Iltimos, ismingizni kiriting!' : 'Пожалуйста, введите ваше имя!');
       return;
@@ -119,6 +160,18 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       showTelegramAlert(lang === 'uz' ? 'Iltimos, telefon raqamingizni to\'liq kiriting!' : 'Пожалуйста, введите полный номер телефона!');
       return;
     }
+
+    if (busySlots.includes(selectedTime)) {
+      showTelegramAlert(
+        lang === 'uz'
+          ? 'Kechirasiz! Ushbu vaqt allaqachon band qilingan. Iltimos, boshqa bo\'sh vaqtni tanlang.'
+          : 'Извините! Это время уже занято. Пожалуйста, выберите другое время.'
+      );
+      setStep(2);
+      return;
+    }
+
+    setIsSubmitting(true);
 
     const randomPin = Math.floor(1000 + Math.random() * 9000).toString(); // e.g. 7842
     const newAppointment: Appointment = {
@@ -132,7 +185,12 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       time: selectedTime,
       status: 'confirmed',
       notes: complaint.trim(),
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      selectedTeethNumbers: selectedTeethNumbers && selectedTeethNumbers.length > 0 ? selectedTeethNumbers : undefined,
+      hasPromoUltrasonic: !!hasPromoUltrasonic,
+      discountAmount: discountAmount || 0,
+      totalAmount: totalPrice || service.price,
+      clinicId: selectedClinicId
     };
 
     const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
@@ -142,15 +200,33 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       telegramUsername: tgUser?.username || null
     };
 
-    // Save to backend API (async without blocking UI)
+    // Save to backend API and handle 409 Conflict
     try {
-      fetch('/api/appointments', {
+      const res = await fetch('/api/appointments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(apiPayload)
-      }).catch(err => console.log('API sync notice:', err));
+      });
+
+      if (res.status === 409) {
+        setIsSubmitting(false);
+        const errJson = await res.json().catch(() => ({}));
+        showTelegramAlert(
+          errJson.detail ||
+          (lang === 'uz'
+            ? '⚠️ DIQQAT: Ushbu vaqtni allaqachon boshqa bemor band qildi! Iltimos, boshqa bo\'sh vaqtni tanlang.'
+            : '⚠️ ВНИМАНИЕ: Это время уже занято другим пациентом! Пожалуйста, выберите другое время.')
+        );
+        // Band vaqtlarni qayta yangilaymiz va 2-bosqichga qaytaramiz
+        setStep(2);
+        const updated = await fetchBusySlots(doctor.id, selectedDate, selectedClinicId);
+        setBusySlots(updated);
+        return;
+      }
     } catch (e) {
       console.log('API notice:', e);
+    } finally {
+      setIsSubmitting(false);
     }
 
     // Telegram WebApp integration
@@ -170,6 +246,9 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     onSuccess(newAppointment);
     onClose();
   };
+
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm animate-fadeIn">
@@ -198,6 +277,35 @@ export const BookingModal: React.FC<BookingModalProps> = ({
           {/* STEP 1: Xizmat va Shifokor */}
           {step === 1 && (
             <div className="space-y-4">
+              {/* Selected Teeth & Cross-Promo notification banner */}
+              {selectedTeethNumbers && selectedTeethNumbers.length > 0 && (
+                <div className="bg-[#112E24]/5 dark:bg-[#183F32]/50 border border-[#C5A880]/40 rounded-2xl p-3 space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-[#112E24] dark:text-[#FAF8F5] flex items-center gap-1.5">
+                      <span>🦷 {lang === 'uz' ? 'Tanlangan tishlar:' : 'Выбранные зубы:'}</span>
+                      <span className="font-mono font-bold text-[#C5A880]">
+                        {selectedTeethNumbers.map(n => `№${n}`).join(', ')}
+                      </span>
+                    </span>
+                    {totalPrice && (
+                      <span className="font-mono font-bold text-[#C5A880]">
+                        {totalPrice.toLocaleString('uz-UZ')} {lang === 'uz' ? "so'm" : 'сум'}
+                      </span>
+                    )}
+                  </div>
+                  {hasPromoUltrasonic && (
+                    <div className="text-[11px] text-emerald-700 dark:text-emerald-300 font-medium flex items-center gap-1">
+                      <span>🎁</span>
+                      <span>
+                        {lang === 'uz'
+                          ? "2 ta tish kross-aksiyasi: Ultratovushli tozalash 50% chegirmada (-200 000 so'm) hisoblandi!"
+                          : 'Кросс-акция: Ультразвуковая чистка со скидкой 50% (-200 000 сум) включена!'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-semibold text-[#1A221E] dark:text-[#FAF8F5] mb-1.5">
                   {lang === 'uz' ? '1. Xizmatni tanlang:' : '1. Выберите услугу:'}
@@ -329,32 +437,58 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#1A221E] dark:text-[#FAF8F5] mb-1.5 flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-[#C5A880]" />
-                  <span>{lang === 'uz' ? 'Mavjud bo\'sh vaqtlar:' : 'Свободное время приема:'}</span>
-                </label>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-[#1A221E] dark:text-[#FAF8F5] flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-[#C5A880]" />
+                    <span>{lang === 'uz' ? 'Mavjud bo\'sh vaqtlar:' : 'Свободное время приема:'}</span>
+                  </label>
+                  {isLoadingSlots && (
+                    <span className="text-[10px] text-[#C5A880] animate-pulse">
+                      {lang === 'uz' ? 'Slotlar tekshirilmoqda...' : 'Проверка слотов...'}
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
                   {TIME_SLOTS.map(time => {
+                    const isBusy = busySlots.includes(time);
                     const isSelected = selectedTime === time;
+
                     return (
                       <button
                         key={time}
-                        onClick={() => setSelectedTime(time)}
-                        className={`py-2 rounded-xl text-xs font-semibold border transition active:scale-95 ${
-                          isSelected
-                            ? 'bg-[#112E24] dark:bg-[#C5A880] border-[#112E24] dark:border-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] shadow-sm'
-                            : 'bg-[#FAF8F5] dark:bg-[#0E231B] border-[#E8E2D8] dark:border-[#C5A880]/20 text-[#1A221E] dark:text-[#FAF8F5] hover:border-[#C5A880]'
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => {
+                          if (!isBusy) setSelectedTime(time);
+                        }}
+                        className={`py-2 px-1 rounded-xl text-xs font-semibold border transition flex flex-col items-center justify-center relative ${
+                          isBusy
+                            ? 'bg-rose-50/70 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/40 text-rose-400 dark:text-rose-400/80 cursor-not-allowed opacity-60'
+                            : isSelected
+                            ? 'bg-[#112E24] dark:bg-[#C5A880] border-[#112E24] dark:border-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] shadow-sm active:scale-95'
+                            : 'bg-[#FAF8F5] dark:bg-[#0E231B] border-[#E8E2D8] dark:border-[#C5A880]/20 text-[#1A221E] dark:text-[#FAF8F5] hover:border-[#C5A880] active:scale-95'
                         }`}
+                        title={isBusy ? (lang === 'uz' ? 'Ushbu vaqt band qilingan' : 'Время уже занято') : ''}
                       >
-                        {time}
+                        <span className={isBusy ? 'line-through decoration-rose-400/70' : ''}>{time}</span>
+                        {isBusy ? (
+                          <span className="text-[8px] font-bold text-rose-600 dark:text-rose-400 flex items-center gap-0.5 mt-0.5">
+                            <Lock className="w-2.5 h-2.5 inline" /> {lang === 'uz' ? 'Band' : 'Занято'}
+                          </span>
+                        ) : (
+                          <span className="text-[8px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">
+                            {lang === 'uz' ? 'Bo\'sh' : 'Свободно'}
+                          </span>
+                        )}
                       </button>
                     );
                   })}
                 </div>
                 <p className="text-[10px] text-[#627068] dark:text-[#9FB1A7] mt-2">
                   {lang === 'uz'
-                    ? '* Qabul davomiyligi o\'rtacha 30-40 daqiqa.'
-                    : '* Средняя длительность приема 30-40 минут.'}
+                    ? '* Qizil belgilangan vaqtlar boshqa bemorlar tomonidan band qilingan. Qabul davomiyligi 30-40 daqiqa.'
+                    : '* Красным отмечено занятое время. Средняя длительность приема 30-40 минут.'}
                 </p>
               </div>
             </div>
@@ -452,10 +586,13 @@ export const BookingModal: React.FC<BookingModalProps> = ({
           ) : (
             <button
               onClick={handleConfirm}
-              className="flex items-center gap-1.5 bg-[#112E24] hover:bg-[#183F32] dark:bg-[#C5A880] dark:hover:bg-[#B39366] text-[#FAF8F5] dark:text-[#07130F] px-5 py-2.5 rounded-full text-xs font-semibold tracking-wide border border-[#C5A880]/40 shadow-md transition active:scale-95"
+              disabled={isSubmitting}
+              className={`flex items-center gap-1.5 bg-[#112E24] hover:bg-[#183F32] dark:bg-[#C5A880] dark:hover:bg-[#B39366] text-[#FAF8F5] dark:text-[#07130F] px-5 py-2.5 rounded-full text-xs font-semibold tracking-wide border border-[#C5A880]/40 shadow-md transition active:scale-95 ${
+                isSubmitting ? 'opacity-70 cursor-not-allowed' : ''
+              }`}
             >
               <CheckCircle className="w-4 h-4 text-[#C5A880] dark:text-[#07130F]" />
-              <span>{lang === 'uz' ? 'Qabulni Tasdiqlash' : 'Подтвердить Запись'}</span>
+              <span>{isSubmitting ? (lang === 'uz' ? 'Tekshirilmoqda...' : 'Проверка...') : (lang === 'uz' ? 'Qabulni Tasdiqlash' : 'Подтвердить Запись')}</span>
             </button>
           )}
         </div>

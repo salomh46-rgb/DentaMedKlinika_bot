@@ -31,3 +31,6 @@ env/
 Thumbs.db
 .idea/
 .vscode/
+.pytest_cache/
+.pytest_temp/
+tests/.tmp/

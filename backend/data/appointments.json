@@ -1,5 +1,61 @@
 [
   {
+    "id": "MED-883300",
+    "pinCode": "7606",
+    "patientName": "Jasper",
+    "phone": "+998 905083302",
+    "doctor": {
+      "id": 2,
+      "name": "Dr. Shahlo Karimova",
+      "specialty": {
+        "uz": "Ortodont (Breket & Eylayner)",
+        "ru": "Ортодонт (Брекеты и Элайнеры)"
+      },
+      "department": "stomatology",
+      "experience": 9,
+      "rating": 4.92,
+      "reviewsCount": 285,
+      "photo": "/images/doctors/dr_shahlo.jpg",
+      "availableDays": [
+        "Dush",
+        "Chor",
+        "Jum",
+        "Shan"
+      ]
+    },
+    "service": {
+      "id": 101,
+      "department": "stomatology",
+      "category": {
+        "uz": "Terapevtik",
+        "ru": "Терапия"
+      },
+      "title": {
+        "uz": "Estetik Plomba va Kariesni davolash",
+        "ru": "Эстетическая пломба и лечение кариеса"
+      },
+      "desc": {
+        "uz": "Nemis kompozit materiallari bilan og'riqsiz tishni tiklash",
+        "ru": "Безболезненное восстановление зуба немецкими композитами"
+      },
+      "price": 350000,
+      "duration": 40,
+      "isPopular": true
+    },
+    "date": "2026-09-12",
+    "time": "14:00",
+    "status": "confirmed",
+    "notes": "",
+    "createdAt": "2026-09-11T18:05:16.811Z",
+    "selectedTeethNumbers": null,
+    "hasPromoUltrasonic": false,
+    "discountAmount": 0,
+    "totalAmount": 350000,
+    "telegramUserId": 1320855100,
+    "telegramUsername": "Dr_eviluz",
+    "reminder24hSent": true
+  },
+  {
     "id": "MED-453422",
     "pinCode": "4148",
     "patientName": "Jasper",

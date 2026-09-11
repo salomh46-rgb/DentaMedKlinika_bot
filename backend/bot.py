@@ -1,7 +1,8 @@
-import os
+﻿import os
 import sys
 import json
 import logging
+from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -79,10 +80,11 @@ async def cmd_start(message: types.Message):
         f"🌿 <b>Assalomu alaykum, {user_name}!</b>\n\n"
         f"<b>DentaMed Atelier</b> — Shveysariya standartidagi Stomatologiya va LOR markazining rasmiy botiga xush kelibsiz.\n\n"
         f"💎 <b>Bizning imkoniyatlar:</b>\n"
+        f"• Ko'p filialli qulay qabul (Nukus Bosh filiali & Chilonzor filiali)\n"
         f"• Interaktiv 32-tishli 3D va anatomik jag' xaritasi\n"
-        f"• Shifokor va bo'sh qabul vaqtini 30 soniyada tanlash\n"
-        f"• Stomatologiya ko'rigidan o'tganga LOR ko'rigi uchun 50% imtiyoz\n"
-        f"• Retsepshn uchun maxsus navbatsiz 4 xonali PIN-kod\n\n"
+        f"• Real-vaqtda bo'sh vaqtlarni band qilish (Double-booking himoyasi)\n"
+        f"• Shveysariya standarti bo'yicha Raqamli Retsept (e-Prescription)\n"
+        f"• Retsepshn uchun navbatsiz 4 xonali PIN-kod\n\n"
         f"Pastdagi <b>«🦷 Qabulga Yozilish»</b> tugmasini bosib, qabulga yozilishingiz mumkin."
     )
     
@@ -102,11 +104,17 @@ async def cmd_start(message: types.Message):
 @dp.message(F.text == "📍 Lokatsiya & Manzil")
 async def handle_location(message: types.Message):
     loc_text = (
-        "📍 <b>DentaMed Shveysariya Klinikasi Manzili:</b>\n\n"
-        "🏢 Toshkent shahar, Mirobod tumani, Nukus ko'chasi, 24-uy\n"
-        "🕒 <b>Ish vaqti:</b> 24/7 (Kechasi ham shoshilinch qabul mavjud)\n"
-        "🚇 <b>Mo'ljal:</b> Rossiya elchixonasi yonida\n"
-        "📞 <b>Telefon:</b> +998 (71) 200-00-00"
+        "📍 <b>DentaMed Filiallari:</b>\n\n"
+        "🏥 <b>1. Nukus Bosh filiali:</b>\n"
+        "🏢 Toshkent sh., Mirobod t., Nukus ko'chasi, 24-uy\n"
+        "🚇 Mo'ljal: Rossiya elchixonasi yonida, 204-kabinet\n"
+        "🕒 Ish vaqti: 24/7 Kechayu-kunduz\n"
+        "📞 Tel: +998 (71) 200-00-00\n\n"
+        "🏥 <b>2. Chilonzor filiali:</b>\n"
+        "🏢 Toshkent sh., Chilonzor t., Bunyodkor shox ko'chasi, 42-uy\n"
+        "🚇 Mo'ljal: Novza metro bekati, Korzinka yonida\n"
+        "🕒 Ish vaqti: 08:00 - 21:00 (Har kuni)\n"
+        "📞 Tel: +998 (71) 200-03-03"
     )
     await message.answer(loc_text, parse_mode=ParseMode.HTML)
     await message.answer_location(latitude=41.2995, longitude=69.2401)
@@ -116,7 +124,8 @@ async def handle_contact(message: types.Message):
     contact_text = (
         "📞 <b>24/7 Tezkor Aloqa Markazi:</b>\n\n"
         "Bemorlarimiz uchun kechayu-kunduz navbatchi stomatolog va LOR-shifokor xizmat ko'rsatadi.\n\n"
-        "☎️ <b>Qo'ng'iroq uchun:</b> +998 (71) 200-00-00\n"
+        "☎️ <b>Nukus Bosh filiali:</b> +998 (71) 200-00-00\n"
+        "☎️ <b>Chilonzor filiali:</b> +998 (71) 200-03-03\n"
         "💬 <b>Telegram Admin:</b> @dentamed_admin\n"
         "🌐 <b>Veb-sayt:</b> https://dentamed.uz"
     )
@@ -200,11 +209,13 @@ async def handle_view_doctors(callback: types.CallbackQuery):
     await callback.answer()
     doctors_msg = (
         "👨‍⚕️ <b>DentaMed Yetakchi Shifokorlari:</b>\n\n"
+        "🏥 <b>Nukus Bosh Filiali:</b>\n"
         "1. <b>Dr. Jamshid Rustamov</b>\n"
         "   • Bosh Stomatolog-Implantolog (12 yil tajriba)\n"
-        "   • Shveysariya Straumann va Janubiy Koreya Osstem implantlari\n\n"
+        "   • Shveysariya Straumann va Osstem implantlari\n\n"
         "2. <b>Dr. Shahlo Karimova</b>\n"
         "   • Ortodont — Breket & Invisalign eylayner (9 yil tajriba)\n\n"
+        "🏥 <b>Chilonzor Filiali:</b>\n"
         "3. <b>Dr. Bobur Mahmudov</b>\n"
         "   • Oliy toifali LOR-Jarroh (15 yil tajriba)\n"
         "   • Gaymorit va burun bitishini endoskopik davolash\n\n"
@@ -259,6 +270,116 @@ async def handle_admin_action(callback: types.CallbackQuery):
         )
     elif action.startswith("adm_call_"):
         await callback.answer("📞 Bemor bilan bog'lanildi deb belgilandi!")
+
+# ==========================================
+# 3. AUTOMATED 24H & 2H REMINDER CALLBACKS
+# ==========================================
+@dp.callback_query(F.data.startswith("rem_confirm_"))
+async def handle_reminder_confirm(callback: types.CallbackQuery):
+    appt_id = callback.data.replace("rem_confirm_", "")
+    appointments_file = Path(__file__).parent / "data" / "appointments.json"
+    
+    updated = False
+    pin_code = ""
+    try:
+        if appointments_file.exists():
+            with open(appointments_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            for a in data:
+                if a.get("id") == appt_id:
+                    a["status"] = "confirmed"
+                    pin_code = a.get("pinCode", "")
+                    updated = True
+                    break
+            if updated:
+                with open(appointments_file, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logging.error(f"Error updating appointment status to confirmed: {e}")
+
+    await callback.answer("✅ Qabulga kelishingiz tasdiqlandi!")
+    confirm_text = (
+        f"✅ <b>QABULINGIZ TASDIQLANDI!</b>\n\n"
+        f"Hurmatli bemor, tashrifingiz klinikamiz ro'yxatida tasdiqlandi. "
+        f"Sizni belgilangan vaqtda kutamiz!\n\n"
+        f"🔑 <b>Retsepshn PIN-kodingiz:</b> <code>{pin_code or 'Mavjud'}</code>\n"
+        f"📍 <i>Iltimos, navbatsiz qabul uchun 5-10 daqiqa oldinroq kelishingizni so'raymiz.</i>"
+    )
+    await callback.message.edit_text(confirm_text, parse_mode=ParseMode.HTML)
+
+@dp.callback_query(F.data.startswith("rem_cancel_"))
+async def handle_reminder_cancel(callback: types.CallbackQuery, bot: Bot):
+    appt_id = callback.data.replace("rem_cancel_", "")
+    appointments_file = Path(__file__).parent / "data" / "appointments.json"
+    
+    patient_name = ""
+    phone = ""
+    try:
+        if appointments_file.exists():
+            with open(appointments_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            for a in data:
+                if a.get("id") == appt_id:
+                    a["status"] = "cancelled"
+                    patient_name = a.get("patientName", "")
+                    phone = a.get("phone", "")
+                    break
+            with open(appointments_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logging.error(f"Error cancelling appointment: {e}")
+
+    await callback.answer("❌ Qabul bekor qilindi.")
+    cancel_text = (
+        f"❌ <b>QABUL BEKOR QILINDI</b>\n\n"
+        f"Talon <code>#{appt_id}</code> bo'yicha qabulingiz bekor qilindi.\n\n"
+        f"Agar boshqa vaqtda tashrif buyurmoqchi bo'lsangiz, quyidagi tugma orqali yangi qulay vaqtni tanlashingiz mumkin."
+    )
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🔄 Yangi Qabulga Yozilish (Mini App)",
+                    web_app=WebAppInfo(url=WEBAPP_URL)
+                )
+            ]
+        ]
+    )
+    await callback.message.edit_text(cancel_text, parse_mode=ParseMode.HTML, reply_markup=kb)
+
+    # Alert admin of cancellation
+    if ADMIN_CHAT_ID:
+        try:
+            await bot.send_message(
+                chat_id=ADMIN_CHAT_ID,
+                text=f"⚠️ <b>BEMOR QABULNI BEKOR QILDI!</b>\n🆔 Talon: #{appt_id}\n👤 Bemor: {patient_name}\n📞 Tel: {phone}",
+                parse_mode=ParseMode.HTML
+            )
+        except Exception as e:
+            logging.error(f"Error notifying admin of cancellation: {e}")
+
+@dp.callback_query(F.data.startswith("rem_resched_"))
+async def handle_reminder_reschedule(callback: types.CallbackQuery):
+    appt_id = callback.data.replace("rem_resched_", "")
+    await callback.answer("🔄 Yangi vaqt tanlash")
+    resched_text = (
+        f"🔄 <b>QABUL VAQTINI KO'CHIRISH</b>\n\n"
+        f"Talon <code>#{appt_id}</code> bo'yicha vaqtni o'zgartirish uchun pastdagi <b>«Yangi Vaqtni Tanlash»</b> "
+        f"tugmasini bosing yoki klinikamiz bilan bevosita bog'laning:\n\n"
+        f"📞 <b>Aloqa:</b> +998 (71) 200-00-00\n"
+        f"💬 <b>Administrator:</b> @dentamed_admin"
+    )
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📅 Yangi Vaqtni Tanlash (Mini App)",
+                    web_app=WebAppInfo(url=WEBAPP_URL)
+                )
+            ]
+        ]
+    )
+    await callback.message.answer(resched_text, parse_mode=ParseMode.HTML, reply_markup=kb)
 
 async def main():
     if BOT_TOKEN == "YOUR_BOT_TOKEN_HERE" or not BOT_TOKEN:

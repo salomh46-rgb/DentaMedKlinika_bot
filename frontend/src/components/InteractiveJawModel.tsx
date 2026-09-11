@@ -10,6 +10,7 @@ interface InteractiveJawModelProps {
   onSelectTooth: (tooth: ToothData) => void;
   activeArch: 'minimal' | 'upper' | 'lower' | 'photo';
   onChangeArch: (arch: 'minimal' | 'upper' | 'lower' | 'photo') => void;
+  selectedTeeth?: ToothData[];
 }
 
 interface ToothPos {
@@ -117,7 +118,8 @@ export const InteractiveJawModel: React.FC<InteractiveJawModelProps> = ({
   selectedTooth,
   onSelectTooth,
   activeArch,
-  onChangeArch
+  onChangeArch,
+  selectedTeeth = []
 }) => {
   // 'mirror': User's right side is on the right of screen (selfie / mirror view)
   // 'clinical': Doctor view (FDI standard where patient right is screen left)
@@ -219,7 +221,7 @@ export const InteractiveJawModel: React.FC<InteractiveJawModelProps> = ({
                 const tooth = teeth.find(t => t.number === pos.number);
                 if (!tooth) return null;
 
-                const isSelected = selectedTooth?.number === tooth.number;
+                const isSelected = selectedTooth?.number === tooth.number || (selectedTeeth && selectedTeeth.some(t => t.number === tooth.number));
                 const isCaries = tooth.condition === 'caries';
                 const isFilling = tooth.condition === 'filling';
                 const isCrown = tooth.condition === 'crown';
@@ -557,7 +559,7 @@ export const InteractiveJawModel: React.FC<InteractiveJawModelProps> = ({
                   const tooth = teeth.find(t => t.number === pos.number);
                   if (!tooth) return null;
 
-                  const isSelected = selectedTooth?.number === tooth.number;
+                  const isSelected = selectedTooth?.number === tooth.number || (selectedTeeth && selectedTeeth.some(t => t.number === tooth.number));
                   const isCaries = tooth.condition === 'caries';
                   const isFilling = tooth.condition === 'filling';
                   const isCrown = tooth.condition === 'crown';

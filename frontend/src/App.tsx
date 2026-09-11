@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Language, Doctor, Service, ToothData, Appointment } from './types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Language, Doctor, Service, ToothData, Appointment, ClinicId } from './types';
 import { DOCTORS, SERVICES } from './data/mockData';
 import { showTelegramConfirm } from './utils/telegramAlerts';
-import { fetchDoctors, fetchServices } from './services/api';
+import { fetchDoctors, fetchServices, fetchAppointments } from './services/api';
 import { Header } from './components/Header';
 import { CrossPromoBanner } from './components/CrossPromoBanner';
 import { ServiceTabs } from './components/ServiceTabs';
@@ -11,20 +11,36 @@ import { DentalChart } from './components/DentalChart';
 import { BeforeAfterGallery } from './components/BeforeAfterGallery';
 import { BookingModal } from './components/BookingModal';
 import { MyAppointments } from './components/MyAppointments';
-import { Calendar, CheckCircle2, Shield, Award, Users, PhoneCall, Sparkles } from 'lucide-react';
+import { EmergencyFloatingButton } from './components/EmergencyFloatingButton';
+import { DigitalTicketModal } from './components/DigitalTicketModal';
+import { ReceptionDashboard } from './components/ReceptionDashboard';
+import { Calendar, CheckCircle2, Shield, Award, Users } from 'lucide-react';
 
 export function App() {
   const [lang, setLang] = useState<Language>('uz');
   const [activeTab, setActiveTab] = useState<string>('services');
+  const [selectedClinicId, setSelectedClinicId] = useState<ClinicId>('nukus');
   
   // Dynamic Live Data from Backend API (with instant mock fallback)
   const [doctors, setDoctors] = useState<Doctor[]>(DOCTORS);
   const [services, setServices] = useState<Service[]>(SERVICES);
+  const [receptionAppointments, setReceptionAppointments] = useState<Appointment[]>([]);
 
   useEffect(() => {
     fetchDoctors().then(setDoctors);
     fetchServices().then(setServices);
+    fetchAppointments().then(setReceptionAppointments);
   }, []);
+
+  // Filter doctors & services by selected clinic (Multi-Tenant Branch Switcher)
+  const filteredDoctors = useMemo(() => {
+    return doctors.filter(d => !d.clinicIds || d.clinicIds.includes(selectedClinicId));
+  }, [doctors, selectedClinicId]);
+
+  const filteredServices = useMemo(() => {
+    return services.filter(s => !s.clinicIds || s.clinicIds.includes(selectedClinicId));
+  }, [services, selectedClinicId]);
+
   
   // Theme state: dark / light
   const [isDark, setIsDark] = useState<boolean>(() => {
@@ -75,6 +91,16 @@ export function App() {
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Multi-teeth & Cross-Promo states for booking
+  const [bookingTeethNumbers, setBookingTeethNumbers] = useState<number[]>([]);
+  const [bookingHasPromo, setBookingHasPromo] = useState<boolean>(false);
+  const [bookingDiscount, setBookingDiscount] = useState<number>(0);
+  const [bookingTotalPrice, setBookingTotalPrice] = useState<number | undefined>(undefined);
+
+  // Digital Ticket (QR Boarding Pass) Modal State
+  const [activeTicket, setActiveTicket] = useState<Appointment | null>(null);
+  const [isTicketOpen, setIsTicketOpen] = useState<boolean>(false);
+
   // Auto-expand Telegram WebApp if opened in Telegram
   useEffect(() => {
     if (window.Telegram?.WebApp) {
@@ -94,6 +120,10 @@ export function App() {
     setSelectedService(service);
     const matchedDoc = doctors.find(d => d.department === service.department) || doctors[0];
     setSelectedDoctor(matchedDoc);
+    setBookingTeethNumbers([]);
+    setBookingHasPromo(false);
+    setBookingDiscount(0);
+    setBookingTotalPrice(undefined);
     setIsBookingOpen(true);
   };
 
@@ -101,18 +131,42 @@ export function App() {
     setSelectedDoctor(doctor);
     const matchedService = services.find(s => s.department === doctor.department) || services[0];
     setSelectedService(matchedService);
+    setBookingTeethNumbers([]);
+    setBookingHasPromo(false);
+    setBookingDiscount(0);
+    setBookingTotalPrice(undefined);
     setIsBookingOpen(true);
   };
 
-  const handleBookFromTooth = (tooth: ToothData) => {
-    setSelectedService(services[0]);
-    setSelectedDoctor(doctors[0]);
+  const handleBookFromTooth = (
+    tooth: ToothData,
+    additionalTeeth?: ToothData[],
+    includePromo?: boolean,
+    promoDiscount?: number,
+    totalPrice?: number
+  ) => {
+    const dentalService = services.find(s => s.department === 'stomatology') || services[0];
+    setSelectedService(dentalService);
+    const matchedDoc = doctors.find(d => d.department === 'stomatology') || doctors[0];
+    setSelectedDoctor(matchedDoc);
+
+    const teethNums = additionalTeeth && additionalTeeth.length > 0
+      ? additionalTeeth.map(t => t.number)
+      : [tooth.number];
+
+    setBookingTeethNumbers(teethNums);
+    setBookingHasPromo(!!includePromo);
+    setBookingDiscount(promoDiscount || 0);
+    setBookingTotalPrice(totalPrice);
     setIsBookingOpen(true);
   };
 
   const handleBookingSuccess = (newAppointment: Appointment) => {
     setAppointments([newAppointment, ...appointments]);
+    setReceptionAppointments(prev => [newAppointment, ...prev]);
     setActiveTab('appointments');
+    setActiveTicket(newAppointment);
+    setIsTicketOpen(true);
     showToast(
       lang === 'uz'
         ? `Qabul muvaffaqiyatli band qilindi! Talon № ${newAppointment.id}`
@@ -125,6 +179,7 @@ export function App() {
       lang === 'uz' ? 'Qabulni bekor qilmoqchimisiz?' : 'Отменить эту запись?',
       () => {
         setAppointments(appointments.filter(a => a.id !== id));
+        setReceptionAppointments(receptionAppointments.filter(a => a.id !== id));
         showToast(lang === 'uz' ? 'Qabul bekor qilindi.' : 'Запись отменена.');
       }
     );
@@ -141,10 +196,14 @@ export function App() {
         appointmentsCount={appointments.length}
         isDark={isDark}
         onToggleDark={toggleTheme}
+        selectedClinicId={selectedClinicId}
+        onSelectClinic={setSelectedClinicId}
       />
 
-      {/* Main Container */}
-      <main className="max-w-xl mx-auto px-4 pt-4">
+      {/* Main Container - Expands for Reception Kanban */}
+      <main className={`mx-auto px-4 pt-4 transition-all duration-300 ${
+        activeTab === 'reception' ? 'max-w-7xl' : 'max-w-xl'
+      }`}>
         {/* Toast alert */}
         {toastMessage && (
           <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-[#112E24] text-[#FAF8F5] px-4 py-2.5 rounded-full shadow-xl text-xs font-semibold flex items-center gap-2 animate-bounce border border-[#C5A880]/40">
@@ -154,22 +213,35 @@ export function App() {
         )}
 
         {/* Cross Promotion Banner */}
-        <CrossPromoBanner
-          lang={lang}
-          onClaim={() => {
-            setSelectedService(services[4] || services[0]); // LOR Endoskopiya
-            setSelectedDoctor(doctors[2] || doctors[0]);
-            setIsBookingOpen(true);
-          }}
-        />
+        {activeTab !== 'reception' && (
+          <CrossPromoBanner
+            lang={lang}
+            onClaim={() => {
+              setSelectedService(services[4] || services[0]); // LOR Endoskopiya
+              setSelectedDoctor(doctors[2] || doctors[0]);
+              setIsBookingOpen(true);
+            }}
+          />
+        )}
 
         {/* Dynamic View based on Active Tab */}
+        {activeTab === 'reception' && (
+          <ReceptionDashboard
+            lang={lang}
+            appointments={receptionAppointments}
+            onAppointmentsChange={setReceptionAppointments}
+            selectedClinicId={selectedClinicId}
+            onSelectClinic={setSelectedClinicId}
+            onRefresh={() => fetchAppointments().then(setReceptionAppointments)}
+          />
+        )}
+
         {activeTab === 'services' && (
           <div className="space-y-6">
             <ServiceTabs
               lang={lang}
               onBookService={handleBookFromService}
-              services={services}
+              services={filteredServices}
             />
 
             {/* Trust Badges */}
@@ -212,7 +284,7 @@ export function App() {
           <DoctorCard
             lang={lang}
             onBookDoctor={handleBookFromDoctor}
-            doctors={doctors}
+            doctors={filteredDoctors}
           />
         )}
 
@@ -259,6 +331,9 @@ export function App() {
         </div>
       </div>
 
+      {/* Emergency Call / Telegram Assistant Floating Button */}
+      <EmergencyFloatingButton lang={lang} />
+
       {/* Booking Wizard Modal */}
       <BookingModal
         lang={lang}
@@ -267,10 +342,27 @@ export function App() {
           setIsBookingOpen(false);
           setSelectedDoctor(null);
           setSelectedService(null);
+          setBookingTeethNumbers([]);
+          setBookingHasPromo(false);
+          setBookingDiscount(0);
+          setBookingTotalPrice(undefined);
         }}
         onSuccess={handleBookingSuccess}
         preselectedDoctor={selectedDoctor}
         preselectedService={selectedService}
+        selectedTeethNumbers={bookingTeethNumbers}
+        hasPromoUltrasonic={bookingHasPromo}
+        discountAmount={bookingDiscount}
+        totalPrice={bookingTotalPrice}
+        selectedClinicId={selectedClinicId}
+      />
+
+      {/* Digital Receipt / QR Boarding Pass Modal */}
+      <DigitalTicketModal
+        lang={lang}
+        isOpen={isTicketOpen}
+        onClose={() => setIsTicketOpen(false)}
+        appointment={activeTicket}
       />
     </div>
   );

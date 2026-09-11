@@ -1,0 +1,30 @@
+[
+  {
+    "id": "RX-1789151775",
+    "appointmentId": "MED-RX-TEST-99",
+    "diagnosis": "Surunkali chuqur karies va o'tkir pulpitis asorati",
+    "medications": [
+      {
+        "name": "Amoxicillin / Clavulanate 625mg",
+        "dosage": "1 tabletkadan 3 mahal",
+        "duration": "5 kun",
+        "instructions": "Ovqatdan keyin ko'p miqdorda suv bilan"
+      },
+      {
+        "name": "Ketonal 50mg",
+        "dosage": "1 tabletka og'riq bo'lganda",
+        "duration": "3 kun",
+        "instructions": "Kuniga ko'pi bilan 2 martagacha"
+      },
+      {
+        "name": "Xlorgeksidin 0.05% eritmasi",
+        "dosage": "Og'izni chayqash",
+        "duration": "7 kun",
+        "instructions": "Har ovqatdan keyin 1 daqiqa chayqash"
+      }
+    ],
+    "doctorNotes": "Issiq va sovuq taomlardan 3 kun tiyilish, qattiq luqmalar chaynash tavsiya etilmaydi.",
+    "nextVisitDate": "2026-09-20",
+    "prescribedAt": "2026-09-11T23:36:15.004013+05:00"
+  }
+]
