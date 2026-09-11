@@ -1,6 +1,7 @@
 [
   {
     "id": 1,
+    "tenantId": "dentamed",
     "name": "Dr. Jamshid Rustamov",
     "specialty": {
       "uz": "Bosh Stomatolog-Implantolog",
@@ -22,10 +23,14 @@
     "branches": [
       "nukus"
     ],
-    "clinicId": "dentamed-nukus"
+    "clinicId": "dentamed-nukus",
+    "clinicIds": [
+      "dentamed-nukus"
+    ]
   },
   {
     "id": 2,
+    "tenantId": "dentamed",
     "name": "Dr. Shahlo Karimova",
     "specialty": {
       "uz": "Ortodont (Breket & Eylayner)",
@@ -46,10 +51,14 @@
     "branches": [
       "chilonzor"
     ],
-    "clinicId": "dentamed-nukus"
+    "clinicId": "dentamed-chilonzor",
+    "clinicIds": [
+      "dentamed-chilonzor"
+    ]
   },
   {
     "id": 3,
+    "tenantId": "dentamed",
     "name": "Dr. Bobur Mahmudov",
     "specialty": {
       "uz": "Oliy toifali LOR-Jarroh (Endoskopiya)",
@@ -69,10 +78,14 @@
     "branches": [
       "nukus"
     ],
-    "clinicId": "dentamed-chilonzor"
+    "clinicId": "dentamed-nukus",
+    "clinicIds": [
+      "dentamed-nukus"
+    ]
   },
   {
     "id": 4,
+    "tenantId": "dentamed",
     "name": "Dr. Dilnoza Alimova",
     "specialty": {
       "uz": "Bolalar LOR Shifokori & Audiolog",
@@ -95,6 +108,178 @@
     "branches": [
       "chilonzor"
     ],
-    "clinicId": "dentamed-chilonzor"
+    "clinicId": "dentamed-chilonzor",
+    "clinicIds": [
+      "dentamed-chilonzor"
+    ]
+  },
+  {
+    "id": 5,
+    "tenantId": "dentamed",
+    "name": "Dr. Jasur Saidov",
+    "specialty": {
+      "uz": "Terapevt-Stomatolog",
+      "ru": "Терапевт-Стоматолог"
+    },
+    "department": "stomatology",
+    "experience": 7,
+    "rating": 4.9,
+    "reviewsCount": 154,
+    "photo": "/images/doctors/dr_jasur.jpg",
+    "availableDays": [
+      "Dush",
+      "Sesh",
+      "Chor",
+      "Pay",
+      "Jum"
+    ],
+    "branch": "yunusobod",
+    "branches": [
+      "yunusobod"
+    ],
+    "clinicId": "dentamed-yunusobod",
+    "clinicIds": [
+      "dentamed-yunusobod"
+    ]
+  },
+  {
+    "id": 6,
+    "tenantId": "dentamed",
+    "name": "Dr. Rustam Ergashev",
+    "specialty": {
+      "uz": "Ortoped-Stomatolog (Vinir & Koronka)",
+      "ru": "Ортопед-Стоматолог (Виниры и Коронки)"
+    },
+    "department": "stomatology",
+    "experience": 11,
+    "rating": 4.93,
+    "reviewsCount": 220,
+    "photo": "/images/doctors/dr_rustam.jpg",
+    "availableDays": [
+      "Dush",
+      "Sesh",
+      "Chor",
+      "Shan"
+    ],
+    "branch": "samarqand",
+    "branches": [
+      "samarqand"
+    ],
+    "clinicId": "dentamed-samarqand",
+    "clinicIds": [
+      "dentamed-samarqand"
+    ]
+  },
+  {
+    "id": 7,
+    "tenantId": "dentamed",
+    "name": "Dr. Nilufar Toirova",
+    "specialty": {
+      "uz": "LOR-Surdolog",
+      "ru": "ЛОР-Сурдолог"
+    },
+    "department": "lor",
+    "experience": 10,
+    "rating": 4.91,
+    "reviewsCount": 175,
+    "photo": "/images/doctors/dr_nilufar.jpg",
+    "availableDays": [
+      "Dush",
+      "Chor",
+      "Pay",
+      "Shan"
+    ],
+    "branch": "buxoro",
+    "branches": [
+      "buxoro"
+    ],
+    "clinicId": "dentamed-buxoro",
+    "clinicIds": [
+      "dentamed-buxoro"
+    ]
+  },
+  {
+    "id": 101,
+    "tenantId": "grandmed",
+    "name": "Dr. Alisher Vohidov",
+    "specialty": {
+      "uz": "Bosh Shifokor, Jag'-yuz jarrohi",
+      "ru": "Главный Врач, Челюстно-лицевой хирург"
+    },
+    "department": "stomatology",
+    "experience": 18,
+    "rating": 4.97,
+    "reviewsCount": 510,
+    "photo": "/images/doctors/dr_alisher.jpg",
+    "availableDays": [
+      "Dush",
+      "Sesh",
+      "Chor",
+      "Pay",
+      "Jum"
+    ],
+    "branch": "grandmed-markaziy",
+    "branches": [
+      "grandmed-markaziy"
+    ],
+    "clinicId": "grandmed-markaziy",
+    "clinicIds": [
+      "grandmed-markaziy"
+    ]
+  },
+  {
+    "id": 102,
+    "tenantId": "grandmed",
+    "name": "Dr. Madina Usmonova",
+    "specialty": {
+      "uz": "Katta Ortodont",
+      "ru": "Ведущий Ортодонт"
+    },
+    "department": "stomatology",
+    "experience": 12,
+    "rating": 4.94,
+    "reviewsCount": 315,
+    "photo": "/images/doctors/dr_madina.jpg",
+    "availableDays": [
+      "Dush",
+      "Chor",
+      "Jum",
+      "Shan"
+    ],
+    "branch": "grandmed-sergeli",
+    "branches": [
+      "grandmed-sergeli"
+    ],
+    "clinicId": "grandmed-sergeli",
+    "clinicIds": [
+      "grandmed-sergeli"
+    ]
+  },
+  {
+    "id": 103,
+    "tenantId": "grandmed",
+    "name": "Dr. Sardor Rahimov",
+    "specialty": {
+      "uz": "LOR-Endoskopist",
+      "ru": "ЛОР-Эндоскопист"
+    },
+    "department": "lor",
+    "experience": 9,
+    "rating": 4.89,
+    "reviewsCount": 204,
+    "photo": "/images/doctors/dr_sardor.jpg",
+    "availableDays": [
+      "Sesh",
+      "Pay",
+      "Shan"
+    ],
+    "branch": "grandmed-markaziy",
+    "branches": [
+      "grandmed-markaziy"
+    ],
+    "clinicId": "grandmed-markaziy",
+    "clinicIds": [
+      "grandmed-markaziy"
+    ]
   }
 ]

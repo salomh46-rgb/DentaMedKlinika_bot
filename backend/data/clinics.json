@@ -1,11 +1,14 @@
 [
   {
     "id": "dentamed-nukus",
+    "tenantId": "dentamed",
     "name": "DentaMed Atelier (Nukus - Bosh filial)",
     "isMain": true,
     "address": "Toshkent shahar, Mirobod tumani, Nukus ko'chasi, 24-uy",
     "landmark": "Rossiya elchixonasi ro'parasi, 204-kabinet",
     "phone": "+998 (71) 200-00-00",
+    "managerName": "Malika Yusupova",
+    "staffPin": "1001",
     "workingHours": "24/7 (Kechasi ham shoshilinch qabul)",
     "location": {
       "lat": 41.2995,
@@ -15,16 +18,223 @@
   },
   {
     "id": "dentamed-chilonzor",
+    "tenantId": "dentamed",
     "name": "DentaMed Chilonzor filiali",
     "isMain": false,
     "address": "Toshkent shahar, Chilonzor tumani, Bunyodkor shox ko'chasi, 42-uy",
     "landmark": "Novza metro bekati, Korzinka yonida, 102-kabinet",
     "phone": "+998 (71) 200-03-03",
+    "managerName": "Otabek Soliyev",
+    "staffPin": "1002",
     "workingHours": "08:00 - 21:00 (Har kuni)",
     "location": {
       "lat": 41.2858,
       "lng": 69.2042
     },
     "mapUrl": "https://maps.google.com/?q=41.2858,69.2042"
+  },
+  {
+    "id": "dentamed-yunusobod",
+    "tenantId": "dentamed",
+    "name": "DentaMed Yunusobod filiali",
+    "isMain": false,
+    "address": "Toshkent shahar, Yunusobod tumani, Amir Temur shox ko'chasi, 88-uy",
+    "landmark": "Shahriston metro bekati ro'parasi",
+    "phone": "+998 (71) 200-04-04",
+    "managerName": "Gulruh Abdullayeva",
+    "staffPin": "1003",
+    "workingHours": "08:30 - 20:30 (Dush-Shan)",
+    "location": {
+      "lat": 41.3542,
+      "lng": 69.2881
+    },
+    "mapUrl": "https://maps.google.com/?q=41.3542,69.2881"
+  },
+  {
+    "id": "dentamed-samarqand",
+    "tenantId": "dentamed",
+    "name": "DentaMed Samarqand filiali",
+    "isMain": false,
+    "address": "Samarqand shahar, Registon ko'chasi, 15-uy",
+    "landmark": "Registon maydoni yonida",
+    "phone": "+998 (66) 230-00-00",
+    "managerName": "Sherzod Rahimov",
+    "staffPin": "1004",
+    "workingHours": "08:00 - 20:00 (Har kuni)",
+    "location": {
+      "lat": 39.6542,
+      "lng": 66.9597
+    },
+    "mapUrl": "https://maps.google.com/?q=39.6542,66.9597"
+  },
+  {
+    "id": "dentamed-buxoro",
+    "tenantId": "dentamed",
+    "name": "DentaMed Buxoro filiali",
+    "isMain": false,
+    "address": "Buxoro shahar, Naqshbandiy ko'chasi, 33-uy",
+    "landmark": "Labihovuz majmuasi yaqinida",
+    "phone": "+998 (65) 220-00-00",
+    "managerName": "Ziyoda Qodirova",
+    "staffPin": "1005",
+    "workingHours": "08:30 - 20:00 (Har kuni)",
+    "location": {
+      "lat": 39.7747,
+      "lng": 64.4286
+    },
+    "mapUrl": "https://maps.google.com/?q=39.7747,64.4286"
+  },
+  {
+    "id": "grandmed-markaziy",
+    "tenantId": "grandmed",
+    "name": "GrandMed International Markaziy filial",
+    "isMain": true,
+    "address": "Toshkent shahar, Shayxontohur tumani, Navoiy ko'chasi, 11-uy",
+    "landmark": "Alisher Navoiy metro bekati yonida",
+    "phone": "+998 (71) 200-99-99",
+    "managerName": "Farruh Ismoilov",
+    "staffPin": "2001",
+    "workingHours": "08:00 - 22:00 (Har kuni)",
+    "location": {
+      "lat": 41.3111,
+      "lng": 69.2452
+    },
+    "mapUrl": "https://maps.google.com/?q=41.3111,69.2452"
+  },
+  {
+    "id": "grandmed-sergeli",
+    "tenantId": "grandmed",
+    "name": "GrandMed Sergeli filiali",
+    "isMain": false,
+    "address": "Toshkent shahar, Sergeli tumani, Yangi Sergeli ko'chasi, 25-uy",
+    "landmark": "Sergeli 4-bekat yonida",
+    "phone": "+998 (71) 200-88-88",
+    "managerName": "Dilshod Bekmirzayev",
+    "staffPin": "2002",
+    "workingHours": "08:30 - 21:00 (Har kuni)",
+    "location": {
+      "lat": 41.2215,
+      "lng": 69.2189
+    },
+    "mapUrl": "https://maps.google.com/?q=41.2215,69.2189"
+  },
+  {
+    "id": "shifonurmed-main",
+    "tenantId": "shifonurmed",
+    "name": "Shifo Nur Chilonzor",
+    "isMain": true,
+    "address": "Toshkent shahar, Chilonzor 9-mavze",
+    "landmark": "Markaziy bino",
+    "phone": "+998 71 200-77-77",
+    "managerName": "Dr. Botir Qodirov",
+    "staffPin": "3007",
+    "workingHours": "08:00 - 20:00 (Har kuni)",
+    "location": {
+      "lat": 41.3111,
+      "lng": 69.2797
+    },
+    "mapUrl": "https://maps.google.com/?q=41.3111,69.2797"
+  },
+  {
+    "id": "shifonurmed1-main",
+    "tenantId": "shifonurmed1",
+    "name": "Shifo Nur Chilonzor",
+    "isMain": true,
+    "address": "Toshkent shahar, Chilonzor 9-mavze",
+    "landmark": "Markaziy bino",
+    "phone": "+998 71 200-77-77",
+    "managerName": "Dr. Botir Qodirov",
+    "staffPin": "3008",
+    "workingHours": "08:00 - 20:00 (Har kuni)",
+    "location": {
+      "lat": 41.3111,
+      "lng": 69.2797
+    },
+    "mapUrl": "https://maps.google.com/?q=41.3111,69.2797"
+  },
+  {
+    "id": "shifonurmed2-main",
+    "tenantId": "shifonurmed2",
+    "name": "Shifo Nur Chilonzor",
+    "isMain": true,
+    "address": "Toshkent shahar, Chilonzor 9-mavze",
+    "landmark": "Markaziy bino",
+    "phone": "+998 71 200-77-77",
+    "managerName": "Dr. Botir Qodirov",
+    "staffPin": "3009",
+    "workingHours": "08:00 - 20:00 (Har kuni)",
+    "location": {
+      "lat": 41.3111,
+      "lng": 69.2797
+    },
+    "mapUrl": "https://maps.google.com/?q=41.3111,69.2797"
+  },
+  {
+    "id": "shifonurmed3-main",
+    "tenantId": "shifonurmed3",
+    "name": "Shifo Nur Chilonzor",
+    "isMain": true,
+    "address": "Toshkent shahar, Chilonzor 9-mavze",
+    "landmark": "Markaziy bino",
+    "phone": "+998 71 200-77-77",
+    "managerName": "Dr. Botir Qodirov",
+    "staffPin": "3010",
+    "workingHours": "08:00 - 20:00 (Har kuni)",
+    "location": {
+      "lat": 41.3111,
+      "lng": 69.2797
+    },
+    "mapUrl": "https://maps.google.com/?q=41.3111,69.2797"
+  },
+  {
+    "id": "shifonurmed4-main",
+    "tenantId": "shifonurmed4",
+    "name": "Shifo Nur Chilonzor",
+    "isMain": true,
+    "address": "Toshkent shahar, Chilonzor 9-mavze",
+    "landmark": "Markaziy bino",
+    "phone": "+998 71 200-77-77",
+    "managerName": "Dr. Botir Qodirov",
+    "staffPin": "3011",
+    "workingHours": "08:00 - 20:00 (Har kuni)",
+    "location": {
+      "lat": 41.3111,
+      "lng": 69.2797
+    },
+    "mapUrl": "https://maps.google.com/?q=41.3111,69.2797"
+  },
+  {
+    "id": "shifonurmed5-main",
+    "tenantId": "shifonurmed5",
+    "name": "Shifo Nur Chilonzor",
+    "isMain": true,
+    "address": "Toshkent shahar, Chilonzor 9-mavze",
+    "landmark": "Markaziy bino",
+    "phone": "+998 71 200-77-77",
+    "managerName": "Dr. Botir Qodirov",
+    "staffPin": "3012",
+    "workingHours": "08:00 - 20:00 (Har kuni)",
+    "location": {
+      "lat": 41.3111,
+      "lng": 69.2797
+    },
+    "mapUrl": "https://maps.google.com/?q=41.3111,69.2797"
+  },
+  {
+    "id": "shifonurmed6-main",
+    "tenantId": "shifonurmed6",
+    "name": "Shifo Nur Chilonzor",
+    "isMain": true,
+    "address": "Toshkent shahar, Chilonzor 9-mavze",
+    "landmark": "Markaziy bino",
+    "phone": "+998 71 200-77-77",
+    "managerName": "Dr. Botir Qodirov",
+    "staffPin": "3013",
+    "workingHours": "08:00 - 20:00 (Har kuni)",
+    "location": {
+      "lat": 41.3111,
+      "lng": 69.2797
+    },
+    "mapUrl": "https://maps.google.com/?q=41.3111,69.2797"
   }
 ]

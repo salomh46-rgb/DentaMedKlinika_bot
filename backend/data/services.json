@@ -1,6 +1,7 @@
 [
   {
     "id": 100,
+    "tenantId": "dentamed",
     "department": "stomatology",
     "category": {
       "uz": "Diagnostika",
@@ -17,10 +18,12 @@
     "price": 0,
     "duration": 20,
     "isPopular": true,
-    "clinicId": "dentamed-nukus"
+    "clinicId": "dentamed-nukus",
+    "clinicIds": ["dentamed-nukus"]
   },
   {
     "id": 101,
+    "tenantId": "dentamed",
     "department": "stomatology",
     "category": {
       "uz": "Terapevtik",
@@ -37,10 +40,12 @@
     "price": 350000,
     "duration": 40,
     "isPopular": true,
-    "clinicId": "dentamed-chilonzor"
+    "clinicId": "dentamed-chilonzor",
+    "clinicIds": ["dentamed-chilonzor"]
   },
   {
     "id": 102,
+    "tenantId": "dentamed",
     "department": "stomatology",
     "category": {
       "uz": "Implantatsiya",
@@ -57,10 +62,12 @@
     "price": 3200000,
     "duration": 60,
     "isPopular": true,
-    "clinicId": "dentamed-nukus"
+    "clinicId": "dentamed-nukus",
+    "clinicIds": ["dentamed-nukus"]
   },
   {
     "id": 103,
+    "tenantId": "dentamed",
     "department": "stomatology",
     "category": {
       "uz": "Ortodontiya",
@@ -77,10 +84,12 @@
     "price": 4500000,
     "duration": 50,
     "isPopular": false,
-    "clinicId": "dentamed-chilonzor"
+    "clinicId": "dentamed-chilonzor",
+    "clinicIds": ["dentamed-chilonzor"]
   },
   {
     "id": 104,
+    "tenantId": "dentamed",
     "department": "stomatology",
     "category": {
       "uz": "Gigiyena",
@@ -97,10 +106,12 @@
     "price": 400000,
     "duration": 35,
     "isPopular": true,
-    "clinicId": "dentamed-nukus"
+    "clinicId": "dentamed-nukus",
+    "clinicIds": ["dentamed-nukus"]
   },
   {
     "id": 201,
+    "tenantId": "dentamed",
     "department": "lor",
     "category": {
       "uz": "Diagnostika",
@@ -117,10 +128,12 @@
     "price": 180000,
     "duration": 25,
     "isPopular": true,
-    "clinicId": "dentamed-chilonzor"
+    "clinicId": "dentamed-chilonzor",
+    "clinicIds": ["dentamed-chilonzor"]
   },
   {
     "id": 202,
+    "tenantId": "dentamed",
     "department": "lor",
     "category": {
       "uz": "Muolaja",
@@ -137,10 +150,12 @@
     "price": 150000,
     "duration": 20,
     "isPopular": true,
-    "clinicId": "dentamed-nukus"
+    "clinicId": "dentamed-nukus",
+    "clinicIds": ["dentamed-nukus"]
   },
   {
     "id": 203,
+    "tenantId": "dentamed",
     "department": "lor",
     "category": {
       "uz": "Muolaja",
@@ -157,14 +172,16 @@
     "price": 120000,
     "duration": 20,
     "isPopular": false,
-    "clinicId": "dentamed-chilonzor"
+    "clinicId": "dentamed-chilonzor",
+    "clinicIds": ["dentamed-chilonzor"]
   },
   {
     "id": 204,
+    "tenantId": "dentamed",
     "department": "lor",
     "category": {
       "uz": "Bolalar LOR",
-      "ru": "Детский ЛОР"
+      "ru": "Детский LOR"
     },
     "title": {
       "uz": "Bolalar Adenoid va Eshitish qobiliyati testi",
@@ -177,6 +194,139 @@
     "price": 220000,
     "duration": 30,
     "isPopular": true,
-    "clinicId": "dentamed-nukus"
+    "clinicId": "dentamed-nukus",
+    "clinicIds": ["dentamed-nukus"]
+  },
+  {
+    "id": 105,
+    "tenantId": "dentamed",
+    "department": "stomatology",
+    "category": {
+      "uz": "Terapevtik",
+      "ru": "Терапия"
+    },
+    "title": {
+      "uz": "Endodontik Davolash (Kanalni plombalash)",
+      "ru": "Эндодонтическое лечение каналов"
+    },
+    "desc": {
+      "uz": "Mikroskop ostida tish kanallarini tozalash va davolash",
+      "ru": "Лечение корневых каналов под микроскопом"
+    },
+    "price": 450000,
+    "duration": 45,
+    "isPopular": true,
+    "clinicId": "dentamed-yunusobod",
+    "clinicIds": ["dentamed-yunusobod"]
+  },
+  {
+    "id": 106,
+    "tenantId": "dentamed",
+    "department": "stomatology",
+    "category": {
+      "uz": "Ortopediya",
+      "ru": "Ортопедия"
+    },
+    "title": {
+      "uz": "E-max Keramik Vinir o'rnatish",
+      "ru": "Установка керамических виниров E-max"
+    },
+    "desc": {
+      "uz": "Gollivud tabassumini ta'minlovchi ultra yupqa vinirlar",
+      "ru": "Ультратонкие виниры для голливудской улыбки"
+    },
+    "price": 2500000,
+    "duration": 60,
+    "isPopular": true,
+    "clinicId": "dentamed-samarqand",
+    "clinicIds": ["dentamed-samarqand"]
+  },
+  {
+    "id": 205,
+    "tenantId": "dentamed",
+    "department": "lor",
+    "category": {
+      "uz": "Diagnostika",
+      "ru": "Диагностика"
+    },
+    "title": {
+      "uz": "Tympanometriya va Audiometriya",
+      "ru": "Тимпанометрия и аудиометрия"
+    },
+    "desc": {
+      "uz": "Quloq pardasi va eshitish asabini apparat tekshiruvi",
+      "ru": "Аппаратная диагностика слуха и барабанной перепонки"
+    },
+    "price": 160000,
+    "duration": 25,
+    "isPopular": true,
+    "clinicId": "dentamed-buxoro",
+    "clinicIds": ["dentamed-buxoro"]
+  },
+  {
+    "id": 301,
+    "tenantId": "grandmed",
+    "department": "stomatology",
+    "category": {
+      "uz": "Implantatsiya",
+      "ru": "Имплантация"
+    },
+    "title": {
+      "uz": "GrandMed Shveytsariya Implanti + All-on-4",
+      "ru": "Швейцарская имплантация GrandMed + All-on-4"
+    },
+    "desc": {
+      "uz": "Shveysariya texnologiyasi asosida to'liq tish qatorini 1 kunda tiklash",
+      "ru": "Восстановление зубного ряда за 1 день по швейцарской технологии"
+    },
+    "price": 4200000,
+    "duration": 90,
+    "isPopular": true,
+    "clinicId": "grandmed-markaziy",
+    "clinicIds": ["grandmed-markaziy"]
+  },
+  {
+    "id": 302,
+    "tenantId": "grandmed",
+    "department": "stomatology",
+    "category": {
+      "uz": "Ortodontiya",
+      "ru": "Ортодонтия"
+    },
+    "title": {
+      "uz": "GrandMed Shaffof Eylaynerlar (Invisalign)",
+      "ru": "Прозрачные элайнеры GrandMed (Invisalign)"
+    },
+    "desc": {
+      "uz": "Ko'rinmas va qulay kapalar orqali tishlarni to'g'rilash",
+      "ru": "Исправление прикуса незаметными капами"
+    },
+    "price": 6000000,
+    "duration": 45,
+    "isPopular": true,
+    "clinicId": "grandmed-sergeli",
+    "clinicIds": ["grandmed-sergeli"]
+  },
+  {
+    "id": 303,
+    "tenantId": "grandmed",
+    "department": "lor",
+    "category": {
+      "uz": "Diagnostika",
+      "ru": "Диагностика"
+    },
+    "title": {
+      "uz": "GrandMed 4K LOR Endoskopiya va Lazer Muolaja",
+      "ru": "GrandMed 4K ЛОР Эндоскопия и лазерное лечение"
+    },
+    "desc": {
+      "uz": "Yuqori aniqlikdagi 4K lazer yordamida burun va tomoq kasalliklarini davolash",
+      "ru": "Лечение заболеваний лор-органов лазером сверхвысокой четкости"
+    },
+    "price": 280000,
+    "duration": 30,
+    "isPopular": true,
+    "clinicId": "grandmed-markaziy",
+    "clinicIds": ["grandmed-markaziy"]
   }
 ]

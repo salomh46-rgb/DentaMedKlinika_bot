@@ -78,11 +78,11 @@ def test_doctors_tenant_isolation():
     common_doctors = nukus_doc_ids.intersection(chilonzor_doc_ids)
     assert len(common_doctors) == 0, f"Filiallararo shifokorlar izolyatsiyasi buzildi: {common_doctors}"
 
-    # Barcha shifokorlar (filtrsiz)
+    # Barcha shifokorlar (filtrsiz) kamida Nukus va Chilonzor shifokorlarini o'z ichiga olishi kerak
     res_all = client.get("/api/doctors")
     assert res_all.status_code == 200
     all_doctors = res_all.json()
-    assert len(all_doctors) == len(nukus_doctors) + len(chilonzor_doctors)
+    assert len(all_doctors) >= len(nukus_doctors) + len(chilonzor_doctors)
 
 def test_services_tenant_isolation():
     """3. Xizmatlar multi-tenant ajralishi va filtrlash"""

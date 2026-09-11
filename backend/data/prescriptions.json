@@ -1,6 +1,43 @@
 [
   {
-    "id": "RX-1789151775",
+    "id": "RX-FE-TEST",
+    "appointmentId": "MED-883300",
+    "diagnosis": "Klinik davolash kursi va reabilitatsiya",
+    "medications": [
+      {
+        "name": "Ibuprofen 400mg",
+        "dosage": "1 tab",
+        "duration": "3 kun",
+        "frequency": "2 mahal",
+        "instructions": "2 mahal"
+      }
+    ],
+    "medicines": [
+      {
+        "name": "Ibuprofen 400mg",
+        "dosage": "1 tab",
+        "frequency": "2 mahal",
+        "duration": "3 kun"
+      }
+    ],
+    "doctorNotes": "",
+    "customNotes": "Holati yaxshi",
+    "recommendations": [
+      "Issiq choy ichmaslik"
+    ],
+    "nextVisitDate": null,
+    "prescribedAt": "2026-09-12T00:01:53.106132+05:00",
+    "pinCode": "7606",
+    "patientName": "Jasper",
+    "phone": "+998 905083302",
+    "doctorName": "Dr. Shahlo Karimova",
+    "clinicId": "dentamed-nukus",
+    "date": "2026-09-12",
+    "createdAt": "2026-09-12T00:00:00Z",
+    "telegramUserId": null
+  },
+  {
+    "id": "RX-1789154515",
     "appointmentId": "MED-RX-TEST-99",
     "diagnosis": "Surunkali chuqur karies va o'tkir pulpitis asorati",
     "medications": [
@@ -23,8 +60,19 @@
         "instructions": "Har ovqatdan keyin 1 daqiqa chayqash"
       }
     ],
+    "medicines": [],
+    "recommendations": [],
     "doctorNotes": "Issiq va sovuq taomlardan 3 kun tiyilish, qattiq luqmalar chaynash tavsiya etilmaydi.",
+    "customNotes": "",
     "nextVisitDate": "2026-09-20",
-    "prescribedAt": "2026-09-11T23:36:15.004013+05:00"
+    "prescribedAt": "2026-09-12T00:21:55.705690+05:00",
+    "patientName": null,
+    "phone": null,
+    "doctorName": null,
+    "clinicId": null,
+    "pinCode": null,
+    "date": null,
+    "telegramUserId": null,
+    "createdAt": null
   }
 ]

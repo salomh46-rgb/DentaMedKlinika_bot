@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Language, Appointment, AppointmentStatus, ClinicId, Prescription, PrescriptionMedicine } from '../types';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Language, Appointment, AppointmentStatus, ClinicId, Prescription, PrescriptionMedicine, StaffSession } from '../types';
 import { CLINICS } from '../data/mockData';
 import {
   Search,
@@ -18,7 +18,13 @@ import {
   Trash2,
   Hash,
   Stethoscope,
-  RefreshCw
+  RefreshCw,
+  Crown,
+  Lock,
+  TrendingUp,
+  Coins,
+  Users,
+  MapPin
 } from 'lucide-react';
 import { updateAppointmentStatus, sendPrescription } from '../services/api';
 import { showTelegramAlert } from '../utils/telegramAlerts';
@@ -29,6 +35,7 @@ interface ReceptionDashboardProps {
   onAppointmentsChange: (updated: Appointment[]) => void;
   selectedClinicId: ClinicId;
   onSelectClinic: (clinicId: ClinicId) => void;
+  staffSession?: StaffSession | null;
   onRefresh?: () => void;
 }
 
@@ -55,11 +62,60 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({
   onAppointmentsChange,
   selectedClinicId,
   onSelectClinic,
+  staffSession = null,
   onRefresh
 }) => {
+  const isReception = staffSession?.role === 'reception';
+  const isDirector = staffSession?.isDirector;
+  const lockedClinicId = isReception && staffSession?.clinicId ? staffSession.clinicId : null;
+
   const [pinSearch, setPinSearch] = useState<string>('');
   const [generalSearch, setGeneralSearch] = useState<string>('');
-  const [clinicFilter, setClinicFilter] = useState<'all' | ClinicId>(selectedClinicId);
+  const [clinicFilter, setClinicFilter] = useState<'all' | ClinicId>(lockedClinicId || (isDirector ? 'all' : selectedClinicId));
+
+  // If receptionist is logged in, strictly enforce their assigned branch
+  useEffect(() => {
+    if (lockedClinicId) {
+      setClinicFilter(lockedClinicId);
+      onSelectClinic(lockedClinicId);
+    }
+  }, [lockedClinicId, onSelectClinic]);
+
+  // Multi-Branch Stats Calculation (Nukus: 12, Chilonzor: 8, Yunusobod: 5, Samarqand: 6, Buxoro: 4)
+  const branchStats = useMemo(() => {
+    const relevantClinics = CLINICS.filter(c => {
+      if (staffSession?.tenantId && staffSession.tenantId !== 'all') {
+        return c.tenantId === staffSession.tenantId;
+      }
+      return true;
+    });
+
+    let totalRevenue = 0;
+    let totalPatients = 0;
+
+    const list = relevantClinics.map(clinic => {
+      const branchAppts = appointments.filter(a => (a.clinicId || 'nukus') === clinic.id);
+      const count = branchAppts.length;
+      const revenue = branchAppts
+        .filter(a => a.status !== 'cancelled' && a.status !== 'no_show')
+        .reduce((sum, a) => sum + (a.totalAmount ?? a.service?.price ?? 0), 0);
+
+      totalPatients += count;
+      totalRevenue += revenue;
+
+      return {
+        clinic,
+        count,
+        revenue
+      };
+    });
+
+    return {
+      list,
+      totalPatients,
+      totalRevenue
+    };
+  }, [appointments, staffSession]);
 
   // Prescription Modal State
   const [prescriptionAppt, setPrescriptionAppt] = useState<Appointment | null>(null);
@@ -77,8 +133,11 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({
   // Filtered appointments
   const filteredAppointments = useMemo(() => {
     return appointments.filter(appt => {
-      // Clinic filter
-      if (clinicFilter !== 'all') {
+      // Receptionist strictly sees only their branch
+      if (lockedClinicId) {
+        const apptClinic = appt.clinicId || 'nukus';
+        if (apptClinic !== lockedClinicId) return false;
+      } else if (clinicFilter !== 'all') {
         const apptClinic = appt.clinicId || 'nukus';
         if (apptClinic !== clinicFilter) return false;
       }
@@ -101,7 +160,7 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({
 
       return true;
     });
-  }, [appointments, clinicFilter, pinSearch, generalSearch]);
+  }, [appointments, lockedClinicId, clinicFilter, pinSearch, generalSearch]);
 
   // Group into 4 Kanban Columns
   const waitingList = filteredAppointments.filter(
@@ -227,72 +286,232 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({
   return (
     <div className="space-y-4 animate-fadeIn pb-12">
       {/* Top Banner & Clinic Triage Controller */}
-      <div className="bg-white dark:bg-[#0E231B] rounded-3xl p-4 border border-[#E8E2D8] dark:border-[#183F32] shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#E8E2D8] dark:border-[#183F32]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#112E24] text-[#C5A880] flex items-center justify-center font-serif font-bold text-lg shadow-sm">
-              🏥
+      <div className="bg-white dark:bg-[#0E231B] rounded-3xl p-4 border border-[#E8E2D8] dark:border-[#183F32] shadow-sm space-y-3">
+        {/* DIRECTOR VIEW: Multi-Branch Network Header */}
+        {isDirector ? (
+          <div className="bg-gradient-to-r from-[#112E24] via-[#183F32] to-[#0A1A14] text-[#FAF8F5] p-4 rounded-2xl border border-[#C5A880]/40 shadow-md">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#C5A880]/30">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#C5A880] to-[#8C6D3F] text-[#112E24] flex items-center justify-center font-bold text-xl shadow-lg flex-shrink-0">
+                  <Crown className="w-6 h-6 text-[#112E24]" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-serif font-bold text-base sm:text-lg text-white tracking-wide">
+                      {staffSession?.titleUz || (lang === 'uz' ? '👑 Klinika Rahbari (Barcha 5 ta filial)' : '👑 Руководитель (Все 5 филиалов)')}
+                    </h2>
+                    <span className="bg-[#C5A880] text-[#112E24] text-[9.5px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                      CEO Access
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#D6BF9F] mt-0.5">
+                    {lang === 'uz'
+                      ? `Xodim: ${staffSession?.staffName || 'Dr. Jamshid Rustamov'} • 5 ta filial bo'yicha markaziy kassa va navbatlar nazorati`
+                      : `Руководитель: ${staffSession?.staffName || 'Dr. Jamshid Rustamov'} • Центральный контроль кассы и очередей`}
+                  </p>
+                </div>
+              </div>
+
+              {/* Total Aggregate Metrics */}
+              <div className="flex items-center gap-2 bg-[#07130F]/60 p-2 rounded-xl border border-[#C5A880]/30 text-xs">
+                <div className="px-2 text-center border-r border-[#C5A880]/30">
+                  <div className="text-[10px] text-[#D6BF9F]">Jami Bemorlar</div>
+                  <div className="font-serif font-bold text-base text-white">{branchStats.totalPatients} ta</div>
+                </div>
+                <div className="px-2 text-center">
+                  <div className="text-[10px] text-[#D6BF9F]">Umumiy Kassa</div>
+                  <div className="font-serif font-bold text-sm text-[#C5A880]">
+                    {branchStats.totalRevenue.toLocaleString('uz-UZ')} so'm
+                  </div>
+                </div>
+              </div>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="font-serif font-bold text-base text-[#112E24] dark:text-[#FAF8F5]">
-                  {lang === 'uz' ? 'Retsepshn Veb-Doskasi' : 'Ресепшн Веб-Доска'}
-                </h2>
-                <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-300 dark:border-emerald-800">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  {lang === 'uz' ? 'Jonli Navbat' : 'Живая очередь'}
+
+            {/* FILIALLAR STATISTIKASI (Multi-Branch Indicator Cards) */}
+            <div className="pt-3">
+              <div className="text-[10.5px] font-bold uppercase tracking-wider text-[#D6BF9F] mb-2 flex items-center justify-between">
+                <span>📊 {lang === 'uz' ? 'Filiallar Ko\'rsatkichlari (Bemorlar & Kassa):' : 'Показатели филиалов:'}</span>
+                <span className="text-[10px] text-[#FAF8F5]/70 normal-case">
+                  {lang === 'uz' ? 'Filialni tanlash uchun kartochkani bosing' : 'Нажмите для перехода к филиалу'}
                 </span>
               </div>
-              <p className="text-xs text-[#627068] dark:text-[#9FB1A7]">
-                {lang === 'uz'
-                  ? 'Klinikaga kelgan bemorlarni 4 xonali PIN bilan kutib olish va yo\'naltirish'
-                  : 'Встреча и маршрутизация пациентов по 4-значному PIN-коду'}
-              </p>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                {branchStats.list.map(({ clinic, count, revenue }) => {
+                  const isSelected = clinicFilter === clinic.id;
+                  return (
+                    <button
+                      key={clinic.id}
+                      type="button"
+                      onClick={() => {
+                        setClinicFilter(clinic.id);
+                        onSelectClinic(clinic.id);
+                      }}
+                      className={`p-2.5 rounded-xl border text-left transition-all relative overflow-hidden ${
+                        isSelected
+                          ? 'bg-[#C5A880] text-[#112E24] border-white shadow-lg scale-[1.02]'
+                          : 'bg-[#0E231B]/80 hover:bg-[#133025] text-[#FAF8F5] border-[#C5A880]/30 hover:border-[#C5A880]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <span className={`text-[11px] font-bold truncate ${isSelected ? 'text-[#112E24]' : 'text-white'}`}>
+                          {clinic.branchName.uz}
+                        </span>
+                        {isSelected && (
+                          <span className="w-2 h-2 rounded-full bg-[#112E24] animate-ping" />
+                        )}
+                      </div>
+                      <div className="flex items-baseline justify-between gap-1">
+                        <span className={`font-serif font-extrabold text-sm ${isSelected ? 'text-[#112E24]' : 'text-[#C5A880]'}`}>
+                          {count} {lang === 'uz' ? 'bemor' : 'пац.'}
+                        </span>
+                        <span className={`text-[9.5px] font-semibold ${isSelected ? 'text-[#112E24]/80' : 'text-[#FAF8F5]/70'}`}>
+                          {clinic.badge.split(' ')[0]}
+                        </span>
+                      </div>
+                      <div className={`text-[10px] font-medium mt-1 truncate ${isSelected ? 'text-[#112E24]/90' : 'text-[#D6BF9F]'}`}>
+                        💰 {revenue.toLocaleString('uz-UZ')} so'm
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* 1-Click Quick Branch Switcher Pills */}
+              <div className="flex items-center gap-1.5 pt-3 overflow-x-auto no-scrollbar">
+                <button
+                  type="button"
+                  onClick={() => setClinicFilter('all')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap flex items-center gap-1 shadow-sm ${
+                    clinicFilter === 'all'
+                      ? 'bg-white text-[#112E24] ring-2 ring-[#C5A880]'
+                      : 'bg-[#07130F] text-[#D6BF9F] hover:text-white border border-[#C5A880]/30'
+                  }`}
+                >
+                  <span>🌟 {lang === 'uz' ? 'Barcha 5 ta filial' : 'Все 5 филиалов'}</span>
+                  <span className="text-[10px] opacity-80">({branchStats.totalPatients})</span>
+                </button>
+
+                {branchStats.list.map(({ clinic, count }) => {
+                  const isCur = clinicFilter === clinic.id;
+                  return (
+                    <button
+                      key={clinic.id}
+                      type="button"
+                      onClick={() => {
+                        setClinicFilter(clinic.id);
+                        onSelectClinic(clinic.id);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition whitespace-nowrap flex items-center gap-1 ${
+                        isCur
+                          ? 'bg-[#C5A880] text-[#112E24] font-bold shadow-sm'
+                          : 'bg-[#07130F] text-[#FAF8F5]/80 hover:text-white border border-[#C5A880]/20'
+                      }`}
+                    >
+                      <Building2 className="w-3 h-3 text-[#C5A880]" />
+                      <span>{clinic.branchName.uz}</span>
+                      <span className="text-[10px] opacity-75 font-bold">({count})</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
+        ) : isReception ? (
+          /* RECEPTIONIST VIEW: Strict Single-Branch Isolation */
+          <div className="bg-gradient-to-r from-emerald-900/90 to-[#112E24] text-white p-4 rounded-2xl border border-emerald-500/40 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-emerald-500 text-white flex items-center justify-center font-bold text-xl shadow-md flex-shrink-0">
+                <MapPin className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="font-serif font-bold text-base sm:text-lg text-white">
+                    📍 {CLINICS.find(c => c.id === (lockedClinicId || selectedClinicId))?.name || 'Filial Retsepshni'}
+                  </h2>
+                  <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[9.5px] font-bold px-2 py-0.5 rounded-full uppercase flex items-center gap-1">
+                    <Lock className="w-2.5 h-2.5" /> Qulflangan
+                  </span>
+                </div>
+                <p className="text-xs text-emerald-100/80 mt-0.5">
+                  {lang === 'uz'
+                    ? `Mas'ul xodim: ${staffSession?.staffName || 'Retsepshn'} • Ushbu hisob FAQAT o'z filiali navbatlarini ko'radi va boshqaradi`
+                    : `Сотрудник: ${staffSession?.staffName || 'Ресепшн'} • Доступ ограничен текущим филиалом`}
+                </p>
+              </div>
+            </div>
 
-          {/* Clinic Switcher Pills */}
-          <div className="flex items-center gap-1.5 bg-[#FAF8F5] dark:bg-[#07130F] p-1 rounded-2xl border border-[#E8E2D8] dark:border-[#183F32]">
-            <button
-              onClick={() => {
-                setClinicFilter('all');
-              }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
-                clinicFilter === 'all'
-                  ? 'bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] shadow-sm'
-                  : 'text-[#627068] dark:text-[#9FB1A7] hover:text-[#1A221E]'
-              }`}
-            >
-              {lang === 'uz' ? 'Barcha filiallar' : 'Все филиалы'}
-            </button>
-            {CLINICS.map(clinic => (
+            <div className="bg-black/30 px-3 py-1.5 rounded-xl border border-emerald-500/30 text-xs text-emerald-200 flex items-center gap-2">
+              <Lock className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{lang === 'uz' ? 'Filial xavfsizligi faol' : 'Безопасность филиала активна'}</span>
+            </div>
+          </div>
+        ) : (
+          /* GENERAL / DEFAULT VIEW */
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#E8E2D8] dark:border-[#183F32]">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-[#112E24] text-[#C5A880] flex items-center justify-center font-serif font-bold text-lg shadow-sm">
+                🏥
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="font-serif font-bold text-base text-[#112E24] dark:text-[#FAF8F5]">
+                    {lang === 'uz' ? 'Retsepshn Veb-Doskasi' : 'Ресепшн Веб-Доска'}
+                  </h2>
+                  <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-300 dark:border-emerald-800">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    {lang === 'uz' ? 'Jonli Navbat' : 'Живая очередь'}
+                  </span>
+                </div>
+                <p className="text-xs text-[#627068] dark:text-[#9FB1A7]">
+                  {lang === 'uz'
+                    ? 'Klinikaga kelgan bemorlarni 4 xonali PIN bilan kutib olish va yo\'naltirish'
+                    : 'Встреча и маршрутизация пациентов по 4-значному PIN-коду'}
+                </p>
+              </div>
+            </div>
+
+            {/* Clinic Switcher Pills */}
+            <div className="flex items-center gap-1.5 bg-[#FAF8F5] dark:bg-[#07130F] p-1 rounded-2xl border border-[#E8E2D8] dark:border-[#183F32] overflow-x-auto no-scrollbar">
               <button
-                key={clinic.id}
-                onClick={() => {
-                  setClinicFilter(clinic.id);
-                  onSelectClinic(clinic.id);
-                }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1 ${
-                  clinicFilter === clinic.id
+                onClick={() => setClinicFilter('all')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition whitespace-nowrap ${
+                  clinicFilter === 'all'
                     ? 'bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] shadow-sm'
                     : 'text-[#627068] dark:text-[#9FB1A7] hover:text-[#1A221E]'
                 }`}
               >
-                <Building2 className="w-3 h-3" />
-                <span>{lang === 'uz' ? clinic.branchName.uz : clinic.branchName.ru}</span>
+                {lang === 'uz' ? 'Barcha filiallar' : 'Все филиалы'}
               </button>
-            ))}
-            {onRefresh && (
-              <button
-                onClick={onRefresh}
-                className="p-1.5 text-[#627068] hover:text-[#C5A880] rounded-xl transition"
-                title="Yangilash"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-              </button>
-            )}
+              {CLINICS.map(clinic => (
+                <button
+                  key={clinic.id}
+                  onClick={() => {
+                    setClinicFilter(clinic.id);
+                    onSelectClinic(clinic.id);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1 whitespace-nowrap ${
+                    clinicFilter === clinic.id
+                      ? 'bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] shadow-sm'
+                      : 'text-[#627068] dark:text-[#9FB1A7] hover:text-[#1A221E]'
+                  }`}
+                >
+                  <Building2 className="w-3 h-3" />
+                  <span>{lang === 'uz' ? clinic.branchName.uz : clinic.branchName.ru}</span>
+                </button>
+              ))}
+              {onRefresh && (
+                <button
+                  onClick={onRefresh}
+                  className="p-1.5 text-[#627068] hover:text-[#C5A880] rounded-xl transition flex-shrink-0"
+                  title="Yangilash"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* 4-DIGIT PIN QUICK SEARCH & GENERAL SEARCH */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-3">
@@ -840,6 +1059,19 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
           <span>{appt.phone}</span>
         </a>
       </div>
+
+      {/* Branch Indicator Tag */}
+      {(() => {
+        const bClinic = CLINICS.find(c => c.id === (appt.clinicId || 'nukus'));
+        return (
+          <div className="flex items-center gap-1">
+            <span className="text-[9.5px] bg-[#112E24]/5 dark:bg-[#C5A880]/15 text-[#112E24] dark:text-[#D6BF9F] font-bold px-2 py-0.5 rounded-md border border-[#C5A880]/30 flex items-center gap-1">
+              <Building2 className="w-2.5 h-2.5 text-[#C5A880]" />
+              <span>{lang === 'uz' ? bClinic?.branchName.uz : bClinic?.branchName.ru}</span>
+            </span>
+          </div>
+        );
+      })()}
 
       {/* Selected Teeth Numbers & Promo */}
       {(appt.selectedTeethNumbers && appt.selectedTeethNumbers.length > 0) || appt.hasPromoUltrasonic ? (

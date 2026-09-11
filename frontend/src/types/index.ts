@@ -1,13 +1,35 @@
-export type ClinicId = 'nukus' | 'chilonzor';
+export type TenantId = 'dentamed' | 'grandmed' | string;
+export type ClinicId = string;
+
+export interface Tenant {
+  id: TenantId;
+  name: string;
+  tagline: {
+    uz: string;
+    ru: string;
+  };
+  logo?: string;
+  badge: string;
+  defaultBranchId: ClinicId;
+}
 
 export interface Clinic {
   id: ClinicId;
+  tenantId?: TenantId;
   name: string;
   branchName: {
     uz: string;
     ru: string;
   };
+  city?: {
+    uz: string;
+    ru: string;
+  };
   address: {
+    uz: string;
+    ru: string;
+  };
+  landmark?: {
     uz: string;
     ru: string;
   };
@@ -17,6 +39,22 @@ export interface Clinic {
     ru: string;
   };
   badge: string;
+  isMain?: boolean;
+  staffPin?: string;
+  managerName?: string;
+}
+
+export type StaffRole = 'reception' | 'clinic_director' | 'super_admin';
+
+export interface StaffSession {
+  role: StaffRole;
+  tenantId: TenantId | 'all';
+  clinicId?: ClinicId;
+  staffName: string;
+  titleUz: string;
+  titleRu: string;
+  isDirector: boolean;
+  allowedClinicIds: ClinicId[];
 }
 
 export type Language = 'uz' | 'ru';

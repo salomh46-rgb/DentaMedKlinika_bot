@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Language, Doctor, Service, ToothData, Appointment, ClinicId } from './types';
-import { DOCTORS, SERVICES } from './data/mockData';
+import { Language, Doctor, Service, ToothData, Appointment, ClinicId, StaffSession } from './types';
+import { DOCTORS, SERVICES, CLINICS, TENANTS } from './data/mockData';
 import { showTelegramConfirm } from './utils/telegramAlerts';
-import { fetchDoctors, fetchServices, fetchAppointments } from './services/api';
+import { fetchDoctors, fetchServices, fetchAppointments, loginStaff } from './services/api';
 import { Header } from './components/Header';
 import { CrossPromoBanner } from './components/CrossPromoBanner';
 import { ServiceTabs } from './components/ServiceTabs';
@@ -14,7 +14,7 @@ import { MyAppointments } from './components/MyAppointments';
 import { EmergencyFloatingButton } from './components/EmergencyFloatingButton';
 import { DigitalTicketModal } from './components/DigitalTicketModal';
 import { ReceptionDashboard } from './components/ReceptionDashboard';
-import { Calendar, CheckCircle2, Shield, Award, Users } from 'lucide-react';
+import { Calendar, CheckCircle2, Shield, Award, Users, Building2, MapPin, Phone, Lock, Crown } from 'lucide-react';
 
 export function App() {
   const [lang, setLang] = useState<Language>('uz');
@@ -26,7 +26,15 @@ export function App() {
   const [services, setServices] = useState<Service[]>(SERVICES);
   const [receptionAppointments, setReceptionAppointments] = useState<Appointment[]>([]);
 
-  // Staff Mode (Reception access gatekeeper - hidden from ordinary patients)
+  // Staff Mode (Reception & Director access)
+  const [staffSession, setStaffSession] = useState<StaffSession | null>(() => {
+    try {
+      const saved = localStorage.getItem('dentamed_staff_session');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return null;
+  });
+
   const [isStaff, setIsStaff] = useState<boolean>(() => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
@@ -47,7 +55,9 @@ export function App() {
   const handleToggleStaff = () => {
     if (isStaff) {
       setIsStaff(false);
+      setStaffSession(null);
       localStorage.removeItem('dentamed_is_staff');
+      localStorage.removeItem('dentamed_staff_session');
       if (activeTab === 'reception') {
         setActiveTab('services');
       }
@@ -59,16 +69,27 @@ export function App() {
     }
   };
 
-  const handleVerifyStaffPin = (e: React.FormEvent) => {
+  const handleVerifyStaffPin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (staffPin === '7777' || staffPin === '2026') {
+    const res = await loginStaff(staffPin);
+    if (res.ok && res.session) {
       setIsStaff(true);
+      setStaffSession(res.session);
       localStorage.setItem('dentamed_is_staff', 'true');
+      localStorage.setItem('dentamed_staff_session', JSON.stringify(res.session));
       setIsStaffModalOpen(false);
       setActiveTab('reception');
-      showToast(lang === 'uz' ? "Xush kelibsiz! Retsepshn paneli faollashtirildi" : "Добро пожаловать! Панель ресепшн активирована");
+
+      if (res.session.role === 'reception' && res.session.clinicId) {
+        setSelectedClinicId(res.session.clinicId);
+        showToast(lang === 'uz' ? `Xush kelibsiz! ${res.session.titleUz} faollashtirildi` : `Добро пожаловать! ${res.session.titleRu}`);
+      } else if (res.session.isDirector) {
+        showToast(lang === 'uz' ? "Xush kelibsiz! 👑 Klinika Rahbari (Barcha 5 ta filial) rejimi faol" : "Добро пожаловать! Режим руководителя активирован");
+      } else {
+        showToast(lang === 'uz' ? "Xush kelibsiz! Tizim boshqaruv paneli faol" : "Добро пожаловать! Панель управления активна");
+      }
     } else {
-      setStaffPinError(lang === 'uz' ? "Noto'g'ri PIN-kod! (Namuna: 7777)" : "Неверный PIN-код! (Пример: 7777)");
+      setStaffPinError(res.error || (lang === 'uz' ? "Noto'g'ri PIN-kod! (Rahbar: 7777, Nukus: 1001)" : "Неверный PIN-код! (Пример: 7777, 1001)"));
     }
   };
 
@@ -86,6 +107,18 @@ export function App() {
   const filteredServices = useMemo(() => {
     return services.filter(s => !s.clinicIds || s.clinicIds.includes(selectedClinicId));
   }, [services, selectedClinicId]);
+
+  const currentClinic = useMemo(() => {
+    return CLINICS.find(c => c.id === selectedClinicId) || CLINICS[0];
+  }, [selectedClinicId]);
+
+  const currentTenant = useMemo(() => {
+    return TENANTS.find(t => t.id === currentClinic?.tenantId) || TENANTS[0];
+  }, [currentClinic]);
+
+  const tenantClinics = useMemo(() => {
+    return CLINICS.filter(c => c.tenantId === currentTenant.id);
+  }, [currentTenant]);
 
   
   // Theme state: dark / light
@@ -246,6 +279,7 @@ export function App() {
         onSelectClinic={setSelectedClinicId}
         isStaff={isStaff}
         onToggleStaff={handleToggleStaff}
+        staffSession={staffSession}
       />
 
       {/* Main Container - Expands for Reception Kanban */}
@@ -281,11 +315,85 @@ export function App() {
             selectedClinicId={selectedClinicId}
             onSelectClinic={setSelectedClinicId}
             onRefresh={() => fetchAppointments().then(setReceptionAppointments)}
+            staffSession={staffSession}
           />
         )}
 
         {activeTab === 'services' && (
           <div className="space-y-6">
+            {/* Multi-Tenant Branch Hero Card */}
+            <div className="bg-white dark:bg-[#0E231B] rounded-3xl p-4 sm:p-5 border border-[#E8E2D8] dark:border-[#183F32] shadow-sm relative overflow-hidden">
+              <div className="flex items-center justify-between gap-2 mb-3 pb-3 border-b border-[#E8E2D8] dark:border-[#183F32]">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-9 h-9 rounded-2xl bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] flex items-center justify-center shrink-0 shadow">
+                    <Building2 className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-[#C5A880]">
+                      {currentTenant?.name || 'DentaMed Atelier'}
+                    </div>
+                    <h2 className="text-sm sm:text-base font-serif font-bold text-[#112E24] dark:text-[#FAF8F5] truncate">
+                      {currentClinic?.name}
+                    </h2>
+                  </div>
+                </div>
+
+                <span className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-[#112E24]/5 dark:bg-[#C5A880]/10 text-[#112E24] dark:text-[#C5A880] border border-[#C5A880]/20 shrink-0">
+                  {filteredDoctors.length} {lang === 'uz' ? 'shifokor' : 'врачей'}
+                </span>
+              </div>
+
+              {/* Branch quick pills */}
+              <div className="space-y-2">
+                <div className="text-[11px] font-medium text-[#627068] dark:text-[#9FB1A7] flex items-center justify-between">
+                  <span>{lang === 'uz' ? 'Filialni tanlang:' : 'Выберите филиал:'}</span>
+                  <span className="text-[10px] text-[#C5A880]">
+                    {tenantClinics.length} {lang === 'uz' ? 'ta filial mavjud' : 'филиалов'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                  {tenantClinics.map(clinic => {
+                    const isSelected = clinic.id === selectedClinicId;
+                    const branchTitle = clinic.branchName?.[lang] || clinic.name;
+                    return (
+                      <button
+                        key={clinic.id}
+                        type="button"
+                        onClick={() => setSelectedClinicId(clinic.id)}
+                        className={`text-xs px-3 py-1.5 rounded-xl font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                          isSelected
+                            ? 'bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] shadow-sm font-semibold'
+                            : 'bg-[#FAF8F5] dark:bg-[#07130F] text-[#627068] dark:text-[#9FB1A7] hover:border-[#C5A880]/40 border border-[#E8E2D8] dark:border-[#183F32]'
+                        }`}
+                      >
+                        <MapPin className={`w-3 h-3 ${isSelected ? 'text-[#C5A880] dark:text-[#07130F]' : 'text-[#627068]'}`} />
+                        <span>{branchTitle}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Active Branch Info Details */}
+              {currentClinic && (
+                <div className="mt-3 pt-3 border-t border-[#E8E2D8]/60 dark:border-[#183F32]/60 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-[#627068] dark:text-[#9FB1A7]">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <MapPin className="w-3.5 h-3.5 text-[#C5A880] shrink-0" />
+                    <span className="truncate">{currentClinic.address[lang] || currentClinic.address.uz}</span>
+                  </div>
+                  <div className="flex items-center justify-between sm:justify-end gap-3">
+                    <span className="flex items-center gap-1">
+                      <Phone className="w-3.5 h-3.5 text-[#C5A880] shrink-0" />
+                      <span>{currentClinic.phone}</span>
+                    </span>
+                    <span className="bg-[#FAF8F5] dark:bg-[#07130F] px-2 py-0.5 rounded-md border border-[#E8E2D8] dark:border-[#183F32] text-[10px]">
+                      {currentClinic.workingHours[lang] || currentClinic.workingHours.uz}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <ServiceTabs
               lang={lang}
               onBookService={handleBookFromService}
@@ -398,11 +506,49 @@ export function App() {
                 <span className="text-xl">🔐</span>
               </div>
               <h3 className="font-serif text-lg font-bold text-[#112E24] dark:text-[#FAF8F5]">
-                {lang === 'uz' ? 'Xodimlar va Retsepshn Kirishi' : 'Вход для персонала'}
+                {lang === 'uz' ? 'Xodimlar va Rahbariyat Kirishi' : 'Вход для персонала и руководства'}
               </h3>
               <p className="text-xs text-[#627068] dark:text-[#9FB1A7] mt-1">
-                {lang === 'uz' ? 'Klinika PIN-kodini kiriting (Standart: 7777)' : 'Введите PIN-код клиники (По умолчанию: 7777)'}
+                {lang === 'uz' ? 'Shaxsiy yoki filial PIN-kodini kiriting:' : 'Введите персональный PIN-код филиала:'}
               </p>
+            </div>
+
+            {/* RBAC Quick Help Badges */}
+            <div className="text-[11px] bg-white dark:bg-[#07130F] p-3 rounded-2xl border border-[#E8E2D8] dark:border-[#183F32] mb-3 space-y-1.5 shadow-sm">
+              <div className="font-medium text-[#112E24] dark:text-[#FAF8F5] flex items-center justify-between">
+                <span className="flex items-center gap-1 font-semibold text-[#C5A880]">
+                  <Crown className="w-3.5 h-3.5" />
+                  <span>Rahbar (Barcha 5 filial):</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setStaffPin('7777')}
+                  className="font-mono bg-[#C5A880]/20 hover:bg-[#C5A880]/30 text-[#C5A880] px-2 py-0.5 rounded-lg font-bold transition"
+                >
+                  7777
+                </button>
+              </div>
+              <div className="text-[#627068] dark:text-[#9FB1A7] pt-1.5 border-t border-[#E8E2D8]/60 dark:border-[#183F32]/60 grid grid-cols-2 gap-1.5 text-[10px]">
+                <button type="button" onClick={() => setStaffPin('1001')} className="flex items-center justify-between bg-[#FAF8F5] dark:bg-[#0E231B] px-2 py-1 rounded-md border border-[#E8E2D8] dark:border-[#183F32] hover:border-[#C5A880]">
+                  <span>Nukus:</span> <b className="font-mono text-[#112E24] dark:text-[#FAF8F5]">1001</b>
+                </button>
+                <button type="button" onClick={() => setStaffPin('1002')} className="flex items-center justify-between bg-[#FAF8F5] dark:bg-[#0E231B] px-2 py-1 rounded-md border border-[#E8E2D8] dark:border-[#183F32] hover:border-[#C5A880]">
+                  <span>Chilonzor:</span> <b className="font-mono text-[#112E24] dark:text-[#FAF8F5]">1002</b>
+                </button>
+                <button type="button" onClick={() => setStaffPin('1003')} className="flex items-center justify-between bg-[#FAF8F5] dark:bg-[#0E231B] px-2 py-1 rounded-md border border-[#E8E2D8] dark:border-[#183F32] hover:border-[#C5A880]">
+                  <span>Yunusobod:</span> <b className="font-mono text-[#112E24] dark:text-[#FAF8F5]">1003</b>
+                </button>
+                <button type="button" onClick={() => setStaffPin('1004')} className="flex items-center justify-between bg-[#FAF8F5] dark:bg-[#0E231B] px-2 py-1 rounded-md border border-[#E8E2D8] dark:border-[#183F32] hover:border-[#C5A880]">
+                  <span>Samarqand:</span> <b className="font-mono text-[#112E24] dark:text-[#FAF8F5]">1004</b>
+                </button>
+              </div>
+              <div className="text-[10px] text-center pt-1 text-[#627068] dark:text-[#9FB1A7]">
+                <span>Buxoro: </span>
+                <button type="button" onClick={() => setStaffPin('1005')} className="font-mono font-bold text-[#112E24] dark:text-[#FAF8F5] hover:underline">1005</button>
+                <span className="mx-1.5">|</span>
+                <span>GrandMed: </span>
+                <button type="button" onClick={() => setStaffPin('2001')} className="font-mono font-bold text-[#112E24] dark:text-[#FAF8F5] hover:underline">2001</button>
+              </div>
             </div>
 
             <form onSubmit={handleVerifyStaffPin} className="space-y-4">
@@ -411,7 +557,7 @@ export function App() {
                   type="password"
                   maxLength={6}
                   autoFocus
-                  placeholder="PIN-kod: 7777"
+                  placeholder="PIN: 7777 yoki 1001"
                   value={staffPin}
                   onChange={e => {
                     setStaffPin(e.target.value);
