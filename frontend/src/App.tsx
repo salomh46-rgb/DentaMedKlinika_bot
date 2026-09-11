@@ -26,6 +26,52 @@ export function App() {
   const [services, setServices] = useState<Service[]>(SERVICES);
   const [receptionAppointments, setReceptionAppointments] = useState<Appointment[]>([]);
 
+  // Staff Mode (Reception access gatekeeper - hidden from ordinary patients)
+  const [isStaff, setIsStaff] = useState<boolean>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('staff') === '1' || urlParams.get('role') === 'reception' || urlParams.get('admin') === '1') {
+        localStorage.setItem('dentamed_is_staff', 'true');
+        return true;
+      }
+      return localStorage.getItem('dentamed_is_staff') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [isStaffModalOpen, setIsStaffModalOpen] = useState<boolean>(false);
+  const [staffPin, setStaffPin] = useState<string>('');
+  const [staffPinError, setStaffPinError] = useState<string | null>(null);
+
+  const handleToggleStaff = () => {
+    if (isStaff) {
+      setIsStaff(false);
+      localStorage.removeItem('dentamed_is_staff');
+      if (activeTab === 'reception') {
+        setActiveTab('services');
+      }
+      showToast(lang === 'uz' ? "Xodim rejimidan chiqildi" : "Вы вышли из режима сотрудника");
+    } else {
+      setIsStaffModalOpen(true);
+      setStaffPin('');
+      setStaffPinError(null);
+    }
+  };
+
+  const handleVerifyStaffPin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (staffPin === '7777' || staffPin === '2026') {
+      setIsStaff(true);
+      localStorage.setItem('dentamed_is_staff', 'true');
+      setIsStaffModalOpen(false);
+      setActiveTab('reception');
+      showToast(lang === 'uz' ? "Xush kelibsiz! Retsepshn paneli faollashtirildi" : "Добро пожаловать! Панель ресепшн активирована");
+    } else {
+      setStaffPinError(lang === 'uz' ? "Noto'g'ri PIN-kod! (Namuna: 7777)" : "Неверный PIN-код! (Пример: 7777)");
+    }
+  };
+
   useEffect(() => {
     fetchDoctors().then(setDoctors);
     fetchServices().then(setServices);
@@ -198,11 +244,13 @@ export function App() {
         onToggleDark={toggleTheme}
         selectedClinicId={selectedClinicId}
         onSelectClinic={setSelectedClinicId}
+        isStaff={isStaff}
+        onToggleStaff={handleToggleStaff}
       />
 
       {/* Main Container - Expands for Reception Kanban */}
       <main className={`mx-auto px-4 pt-4 transition-all duration-300 ${
-        activeTab === 'reception' ? 'max-w-7xl' : 'max-w-xl'
+        activeTab === 'reception' && isStaff ? 'max-w-7xl' : 'max-w-xl'
       }`}>
         {/* Toast alert */}
         {toastMessage && (
@@ -224,8 +272,8 @@ export function App() {
           />
         )}
 
-        {/* Dynamic View based on Active Tab */}
-        {activeTab === 'reception' && (
+        {/* Dynamic View based on Active Tab (Protected Reception View) */}
+        {activeTab === 'reception' && isStaff && (
           <ReceptionDashboard
             lang={lang}
             appointments={receptionAppointments}
@@ -330,6 +378,73 @@ export function App() {
           </button>
         </div>
       </div>
+
+      {/* Subtle Staff Portal Trigger in Footer */}
+      <div className="max-w-xl mx-auto px-4 py-6 text-center text-xs text-[#627068]/60 dark:text-[#9FB1A7]/40">
+        <button
+          onClick={handleToggleStaff}
+          className="hover:text-[#C5A880] transition inline-flex items-center gap-1.5 text-[11px] font-medium"
+        >
+          <span>{isStaff ? '🔑 Xodim / Retsepshn Rejimi Faol (Chiqish)' : '🔐 Xodimlar / Retsepshn Kirishi'}</span>
+        </button>
+      </div>
+
+      {/* Staff Passcode Verification Modal */}
+      {isStaffModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#FAF8F5] dark:bg-[#0E231B] rounded-3xl p-6 max-w-sm w-full border border-[#C5A880]/40 shadow-2xl animate-scale-up">
+            <div className="text-center mb-4">
+              <div className="w-12 h-12 rounded-2xl bg-[#112E24] text-[#C5A880] flex items-center justify-center mx-auto mb-3 border border-[#C5A880]/30 shadow-inner">
+                <span className="text-xl">🔐</span>
+              </div>
+              <h3 className="font-serif text-lg font-bold text-[#112E24] dark:text-[#FAF8F5]">
+                {lang === 'uz' ? 'Xodimlar va Retsepshn Kirishi' : 'Вход для персонала'}
+              </h3>
+              <p className="text-xs text-[#627068] dark:text-[#9FB1A7] mt-1">
+                {lang === 'uz' ? 'Klinika PIN-kodini kiriting (Standart: 7777)' : 'Введите PIN-код клиники (По умолчанию: 7777)'}
+              </p>
+            </div>
+
+            <form onSubmit={handleVerifyStaffPin} className="space-y-4">
+              <div>
+                <input
+                  type="password"
+                  maxLength={6}
+                  autoFocus
+                  placeholder="PIN-kod: 7777"
+                  value={staffPin}
+                  onChange={e => {
+                    setStaffPin(e.target.value);
+                    setStaffPinError(null);
+                  }}
+                  className="w-full text-center tracking-[0.3em] font-mono text-xl py-3 rounded-2xl border border-[#E8E2D8] dark:border-[#183F32] bg-white dark:bg-[#07130F] text-[#112E24] dark:text-[#FAF8F5] focus:outline-none focus:border-[#C5A880]"
+                />
+                {staffPinError && (
+                  <div className="text-red-500 text-xs text-center mt-2 font-medium">
+                    {staffPinError}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsStaffModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-full border border-[#E8E2D8] dark:border-[#183F32] text-xs font-semibold text-[#627068] dark:text-[#9FB1A7] hover:bg-[#EBE5DC]/50 dark:hover:bg-[#183F32]/50 transition"
+                >
+                  {lang === 'uz' ? 'Bekor qilish' : 'Отмена'}
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-full bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] text-xs font-bold hover:bg-[#183F32] dark:hover:bg-[#D6BF9F] transition shadow-md"
+                >
+                  {lang === 'uz' ? 'Kirish' : 'Войти'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Emergency Call / Telegram Assistant Floating Button */}
       <EmergencyFloatingButton lang={lang} />

@@ -13,6 +13,8 @@ interface HeaderProps {
   onToggleDark: () => void;
   selectedClinicId?: ClinicId;
   onSelectClinic?: (clinicId: ClinicId) => void;
+  isStaff?: boolean;
+  onToggleStaff?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -24,7 +26,9 @@ export const Header: React.FC<HeaderProps> = ({
   isDark,
   onToggleDark,
   selectedClinicId = 'nukus',
-  onSelectClinic
+  onSelectClinic,
+  isStaff = false,
+  onToggleStaff
 }) => {
   const [isClinicMenuOpen, setIsClinicMenuOpen] = React.useState(false);
   const activeClinic = CLINICS.find(c => c.id === selectedClinicId) || CLINICS[0];
@@ -185,10 +189,10 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Navigation tabs */}
-      <div className="max-w-xl mx-auto px-2 flex gap-1.5 border-t border-[#E8E2D8]/80 dark:border-[#183F32] overflow-x-auto no-scrollbar py-1.5">
+      <div className="max-w-xl mx-auto px-2 flex gap-1.5 border-t border-[#E8E2D8]/80 dark:border-[#183F32] overflow-x-auto no-scrollbar py-1.5 items-center">
         {[
           { id: 'services', labelUz: 'Xizmatlar', labelRu: 'Услуги', icon: Sparkles },
-          { id: 'reception', labelUz: '📋 Retsepshn', labelRu: '📋 Ресепшн', icon: null, highlight: true },
+          ...(isStaff ? [{ id: 'reception', labelUz: '📋 Retsepshn', labelRu: '📋 Ресепшн', icon: null, highlight: true }] : []),
           { id: 'chart', labelUz: 'Tish Xaritasi', labelRu: 'Карта зубов', icon: null },
           { id: 'doctors', labelUz: 'Shifokorlar', labelRu: 'Врачи', icon: null },
           { id: 'gallery', labelUz: 'Natijalar (Oldin/Keyin)', labelRu: 'До / После', icon: null },
@@ -211,6 +215,16 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           );
         })}
+
+        {isStaff && (
+          <button
+            onClick={onToggleStaff}
+            className="ml-auto text-[10px] text-[#A63A3A] dark:text-[#F87171] bg-[#FEE2E2]/60 dark:bg-[#450A0A]/40 px-2 py-0.5 rounded-full border border-red-300 dark:border-red-900 whitespace-nowrap font-bold"
+            title="Xodim rejimidan chiqish"
+          >
+            Chiqish
+          </button>
+        )}
       </div>
     </header>
   );

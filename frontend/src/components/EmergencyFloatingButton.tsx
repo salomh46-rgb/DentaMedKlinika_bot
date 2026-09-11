@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { Language } from '../types';
 import { PhoneCall, Send, AlertTriangle, X, ShieldAlert, Clock, MapPin } from 'lucide-react';
 
@@ -22,32 +22,19 @@ export const EmergencyFloatingButton: React.FC<EmergencyFloatingButtonProps> = (
 
   return (
     <>
-      {/* Floating SOS Action Button */}
-      <div className="fixed bottom-20 right-4 z-40">
+      {/* Compact Elegant Boutique SOS Button (Non-intrusive) */}
+      <div className="fixed bottom-20 right-3.5 z-40">
         <button
           onClick={() => setIsOpen(true)}
-          className="group relative flex items-center gap-2 bg-gradient-to-r from-rose-600 via-rose-700 to-[#112E24] text-white px-4 py-3 rounded-full shadow-2xl border-2 border-[#C5A880]/50 hover:scale-105 active:scale-95 transition-all duration-300"
+          className="relative w-11 h-11 bg-[#112E24]/90 hover:bg-[#183F32] dark:bg-[#0E231B]/95 backdrop-blur-md text-[#FAF8F5] rounded-full shadow-lg border border-[#C5A880]/60 hover:border-[#C5A880] flex items-center justify-center transition-all duration-200 active:scale-90 hover:shadow-[#C5A880]/20"
           aria-label="Favqulodda yordam"
+          title={lang === 'uz' ? "24/7 Shoshilinch yordam" : "24/7 Экстренная помощь"}
         >
-          {/* Pulsing Radar Ring */}
-          <span className="absolute -inset-1 rounded-full bg-rose-600/40 animate-ping pointer-events-none"></span>
+          <PhoneCall className="w-4 h-4 text-[#C5A880] group-hover:text-white transition" />
           
-          <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-            <PhoneCall className="w-4 h-4 text-white animate-pulse" />
-          </div>
-          
-          <div className="text-left hidden xs:block sm:block pr-1">
-            <span className="text-[9px] uppercase tracking-widest text-[#D6BF9F] font-bold block leading-none">
-              {lang === 'uz' ? '24/7 SOS' : '24/7 SOS'}
-            </span>
-            <span className="text-xs font-bold font-serif leading-tight">
-              {lang === 'uz' ? 'Tezkor Yordam' : 'Срочная Помощь'}
-            </span>
-          </div>
-
-          <span className="flex h-2.5 w-2.5 relative">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-300"></span>
+          {/* Subtle SOS Mini-Badge */}
+          <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full shadow-sm tracking-wider border border-white/20">
+            SOS
           </span>
         </button>
       </div>

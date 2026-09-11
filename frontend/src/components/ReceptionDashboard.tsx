@@ -173,6 +173,11 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({
     if (!prescriptionAppt) return;
 
     setIsSendingPrescription(true);
+    const validMeds = medicines.filter(m => m.name.trim().length > 0);
+    const serviceTitle = prescriptionAppt.service?.title
+      ? (typeof prescriptionAppt.service.title === 'object' ? prescriptionAppt.service.title[lang] || prescriptionAppt.service.title.uz : prescriptionAppt.service.title)
+      : 'Stomatologik / LOR ko\'rigi va muolajasi';
+
     const newPrescription: Prescription = {
       id: 'RX-' + Math.floor(100000 + Math.random() * 900000),
       appointmentId: prescriptionAppt.id,
@@ -182,7 +187,9 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({
       doctorName: prescriptionAppt.doctor.name,
       clinicId: prescriptionAppt.clinicId || selectedClinicId,
       date: new Date().toISOString().split('T')[0],
-      medicines: medicines.filter(m => m.name.trim().length > 0),
+      medicines: validMeds,
+      medications: validMeds,
+      diagnosis: `${serviceTitle} (Qabul: ${prescriptionAppt.date} ${prescriptionAppt.time})`,
       recommendations: selectedRecommendations,
       customNotes: customNotes.trim(),
       createdAt: new Date().toISOString(),

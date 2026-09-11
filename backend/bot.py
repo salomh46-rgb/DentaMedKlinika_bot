@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sys
 import json
 import logging
@@ -276,6 +276,7 @@ async def handle_admin_action(callback: types.CallbackQuery):
 # ==========================================
 @dp.callback_query(F.data.startswith("rem_confirm_"))
 async def handle_reminder_confirm(callback: types.CallbackQuery):
+    await callback.answer("✅ Qabulga kelishingiz tasdiqlandi!")
     appt_id = callback.data.replace("rem_confirm_", "")
     appointments_file = Path(__file__).parent / "data" / "appointments.json"
     
@@ -297,7 +298,6 @@ async def handle_reminder_confirm(callback: types.CallbackQuery):
     except Exception as e:
         logging.error(f"Error updating appointment status to confirmed: {e}")
 
-    await callback.answer("✅ Qabulga kelishingiz tasdiqlandi!")
     confirm_text = (
         f"✅ <b>QABULINGIZ TASDIQLANDI!</b>\n\n"
         f"Hurmatli bemor, tashrifingiz klinikamiz ro'yxatida tasdiqlandi. "
@@ -305,10 +305,15 @@ async def handle_reminder_confirm(callback: types.CallbackQuery):
         f"🔑 <b>Retsepshn PIN-kodingiz:</b> <code>{pin_code or 'Mavjud'}</code>\n"
         f"📍 <i>Iltimos, navbatsiz qabul uchun 5-10 daqiqa oldinroq kelishingizni so'raymiz.</i>"
     )
-    await callback.message.edit_text(confirm_text, parse_mode=ParseMode.HTML)
+    try:
+        await callback.message.edit_text(confirm_text, parse_mode=ParseMode.HTML)
+    except Exception as e:
+        logging.warning(f"Could not edit reminder message: {e}")
 
 @dp.callback_query(F.data.startswith("rem_cancel_"))
-async def handle_reminder_cancel(callback: types.CallbackQuery, bot: Bot):
+async def handle_reminder_cancel(callback: types.CallbackQuery):
+    await callback.answer("❌ Qabul bekor qilindi.")
+    bot = callback.bot
     appt_id = callback.data.replace("rem_cancel_", "")
     appointments_file = Path(__file__).parent / "data" / "appointments.json"
     
@@ -329,7 +334,6 @@ async def handle_reminder_cancel(callback: types.CallbackQuery, bot: Bot):
     except Exception as e:
         logging.error(f"Error cancelling appointment: {e}")
 
-    await callback.answer("❌ Qabul bekor qilindi.")
     cancel_text = (
         f"❌ <b>QABUL BEKOR QILINDI</b>\n\n"
         f"Talon <code>#{appt_id}</code> bo'yicha qabulingiz bekor qilindi.\n\n"
@@ -345,10 +349,13 @@ async def handle_reminder_cancel(callback: types.CallbackQuery, bot: Bot):
             ]
         ]
     )
-    await callback.message.edit_text(cancel_text, parse_mode=ParseMode.HTML, reply_markup=kb)
+    try:
+        await callback.message.edit_text(cancel_text, parse_mode=ParseMode.HTML, reply_markup=kb)
+    except Exception as e:
+        logging.warning(f"Could not edit cancel message: {e}")
 
     # Alert admin of cancellation
-    if ADMIN_CHAT_ID:
+    if ADMIN_CHAT_ID and bot:
         try:
             await bot.send_message(
                 chat_id=ADMIN_CHAT_ID,
@@ -360,8 +367,8 @@ async def handle_reminder_cancel(callback: types.CallbackQuery, bot: Bot):
 
 @dp.callback_query(F.data.startswith("rem_resched_"))
 async def handle_reminder_reschedule(callback: types.CallbackQuery):
-    appt_id = callback.data.replace("rem_resched_", "")
     await callback.answer("🔄 Yangi vaqt tanlash")
+    appt_id = callback.data.replace("rem_resched_", "")
     resched_text = (
         f"🔄 <b>QABUL VAQTINI KO'CHIRISH</b>\n\n"
         f"Talon <code>#{appt_id}</code> bo'yicha vaqtni o'zgartirish uchun pastdagi <b>«Yangi Vaqtni Tanlash»</b> "
@@ -379,7 +386,10 @@ async def handle_reminder_reschedule(callback: types.CallbackQuery):
             ]
         ]
     )
-    await callback.message.answer(resched_text, parse_mode=ParseMode.HTML, reply_markup=kb)
+    try:
+        await callback.message.answer(resched_text, parse_mode=ParseMode.HTML, reply_markup=kb)
+    except Exception as e:
+        logging.warning(f"Could not send reschedule message: {e}")
 
 async def main():
     if BOT_TOKEN == "YOUR_BOT_TOKEN_HERE" or not BOT_TOKEN:

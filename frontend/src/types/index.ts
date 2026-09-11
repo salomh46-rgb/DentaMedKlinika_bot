@@ -104,6 +104,8 @@ export interface Prescription {
   customNotes?: string;
   createdAt: string;
   telegramUserId?: number;
+  diagnosis?: string;
+  medications?: any[];
 }
 
 

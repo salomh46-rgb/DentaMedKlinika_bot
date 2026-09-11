@@ -3,7 +3,7 @@ import sys
 import json
 import asyncio
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from pathlib import Path
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
@@ -97,24 +97,42 @@ class AppointmentModel(BaseModel):
     reminder24hSent: Optional[bool] = False
     reminder2hSent: Optional[bool] = False
 
+class StatusUpdateModel(BaseModel):
+    status: str
+
 class MedicationItem(BaseModel):
     name: str
     dosage: str
-    duration: str
+    duration: Optional[str] = "5 kun"
+    frequency: Optional[str] = ""
     instructions: Optional[str] = ""
 
 class PrescriptionModel(BaseModel):
     id: Optional[str] = None
     appointmentId: str
-    diagnosis: str
-    medications: List[MedicationItem] = []
+    diagnosis: Optional[str] = "Klinik davolash kursi va reabilitatsiya"
+    medications: Optional[List[MedicationItem]] = []
+    diagnosis: Optional[str] = "Stomatologik / LOR ko'rigi va muolajasi"
+    medications: Optional[List[dict]] = []
+    medicines: Optional[List[dict]] = []
+    recommendations: Optional[List[str]] = []
     doctorNotes: Optional[str] = ""
+    customNotes: Optional[str] = ""
     nextVisitDate: Optional[str] = None
     prescribedAt: Optional[str] = None
+    patientName: Optional[str] = None
+    phone: Optional[str] = None
+    doctorName: Optional[str] = None
+    clinicId: Optional[str] = None
+    pinCode: Optional[str] = None
+    date: Optional[str] = None
+    telegramUserId: Optional[int] = None
+    createdAt: Optional[str] = None
 
 MedicationItem.model_rebuild()
 PrescriptionModel.model_rebuild()
 AppointmentModel.model_rebuild()
+StatusUpdateModel.model_rebuild()
 
 async def notify_patient(appt: AppointmentModel):
     """Send formal booking confirmation receipt directly to the patient's Telegram chat"""
@@ -370,16 +388,20 @@ async def notify_prescription(pres: dict, appt: Optional[dict] = None):
     if not BOT_TOKEN:
         return
 
-    telegram_user_id = None
-    patient_name = "Hurmatli bemor"
-    doc_name = "Shifokor"
+    telegram_user_id = pres.get("telegramUserId")
+    patient_name = pres.get("patientName") or "Hurmatli bemor"
+    doc_name = pres.get("doctorName") or "Shifokor"
     clinic_name = "DentaMed Atelier"
 
     if appt:
-        telegram_user_id = appt.get("telegramUserId")
-        patient_name = appt.get("patientName", "Hurmatli bemor")
-        doc_name = appt.get("doctor", {}).get("name", "DentaMed Shifokori")
-        clinic_id = appt.get("clinicId", "dentamed-nukus")
+        telegram_user_id = telegram_user_id or appt.get("telegramUserId")
+        patient_name = appt.get("patientName", patient_name)
+        doc_name = appt.get("doctor", {}).get("name", doc_name)
+        clinic_id = appt.get("clinicId") or pres.get("clinicId", "dentamed-nukus")
+        clinic = get_clinic_by_id(clinic_id)
+        clinic_name = clinic.get("name", "DentaMed Atelier")
+    else:
+        clinic_id = pres.get("clinicId", "dentamed-nukus")
         clinic = get_clinic_by_id(clinic_id)
         clinic_name = clinic.get("name", "DentaMed Atelier")
 
@@ -387,14 +409,28 @@ async def notify_prescription(pres: dict, appt: Optional[dict] = None):
         return
 
     meds_text = ""
-    for idx, med in enumerate(pres.get("medications", []), 1):
-        instructions = f" ({med.get('instructions')})" if med.get("instructions") else ""
-        meds_text += f"{idx}. 💊 <b>{med.get('name')}</b> — {med.get('dosage')}\n   ⏱ Qabul davomiyligi: {med.get('duration')}{instructions}\n"
+    meds_list = pres.get("medications") or []
+    for idx, med in enumerate(meds_list, 1):
+        instr = med.get("instructions") or med.get("frequency") or ""
+        instr_text = f" ({instr})" if instr else ""
+        meds_text += f"{idx}. 💊 <b>{med.get('name')}</b> — {med.get('dosage')}\n   ⏱ Qabul davomiyligi: {med.get('duration', '5 kun')}{instr_text}\n"
+
+    # Also check if recommendations exist
+    rec_text = ""
+    recs = pres.get("recommendations")
+    if recs:
+        if isinstance(recs, list):
+            rec_text = "💡 <b>Tavsiyalar:</b>\n" + "\n".join(f"• {r}" for r in recs) + "\n"
+        elif isinstance(recs, str):
+            rec_text = f"💡 <b>Tavsiyalar:</b>\n{recs}\n"
 
     next_visit = pres.get("nextVisitDate")
     next_visit_text = f"📅 <b>Keyingi nazorat ko'rigi:</b> {next_visit}\n" if next_visit else ""
-    doc_notes = pres.get("doctorNotes")
-    notes_text = f"💡 <b>Shifokor tavsiyasi:</b>\n{doc_notes}\n" if doc_notes else ""
+    
+    doc_notes = pres.get("doctorNotes") or pres.get("customNotes")
+    notes_text = f"📝 <b>Shifokor xulosasi:</b>\n{doc_notes}\n" if doc_notes else ""
+
+    diagnosis = pres.get("diagnosis", "Klinik tekshiruv va davolash kursi")
 
     rx_msg = (
         f"🇨🇭 <b>DENTAMED ATELIER | RAQAMLI RETSEPT</b>\n"
@@ -408,9 +444,10 @@ async def notify_prescription(pres: dict, appt: Optional[dict] = None):
         f"📅 <b>Berilgan sana:</b> {datetime.now(TASHKENT_TZ).strftime('%d.%m.%Y, %H:%M')}\n"
         f"────────────────────────\n"
         f"🔍 <b>Tashxis:</b>\n"
-        f"<b>{pres.get('diagnosis')}</b>\n\n"
+        f"<b>{diagnosis}</b>\n\n"
         f"💊 <b>BELGILANGAN DORI VOSITALARI:</b>\n"
-        f"{meds_text}\n"
+        f"{meds_text or 'Ko\'rsatilmagan'}\n"
+        f"{rec_text}"
         f"{notes_text}"
         f"{next_visit_text}"
         f"────────────────────────\n"
@@ -517,57 +554,47 @@ async def update_service(service_id: int, request: Request):
 def get_available_slots(doctorId: int = Query(...), date: str = Query(...), clinicId: Optional[str] = Query(None)):
     db = load_db()
     booked_times = set()
-    norm_clinic = None
-    if clinicId:
-        norm_clinic = "dentamed-nukus" if "nukus" in clinicId.lower() else ("dentamed-chilonzor" if "chilonzor" in clinicId.lower() else clinicId)
-
     for a in db:
-        if a.get("status") in ["cancelled", "no_show"]:
+        if a.get("status") == "cancelled":
             continue
         a_doc_id = a.get("doctor", {}).get("id")
         a_date = a.get("date")
         a_clinic = a.get("clinicId", "dentamed-nukus")
 
-        if str(a_doc_id) == str(doctorId) and a_date == date:
-            if norm_clinic is None or a_clinic == norm_clinic or a_clinic == clinicId:
+        if a_doc_id == doctorId and a_date == date:
+            if clinicId is None or a_clinic == clinicId:
                 t = a.get("time")
                 if t:
                     booked_times.add(t)
 
-    slot_list = sorted(list(booked_times))
+    sorted_slots = sorted(list(booked_times))
     return {
         "doctorId": doctorId,
         "date": date,
         "clinicId": clinicId,
-        "bookedTimes": slot_list,
-        "busySlots": slot_list
+        "bookedTimes": sorted_slots,
+        "busySlots": sorted_slots
     }
 
-@app.patch("/api/appointments/{appointment_id}/status")
-async def update_appointment_status(appointment_id: str, request: Request):
-    data = await request.json()
-    new_status = data.get("status")
-    if not new_status:
-        raise HTTPException(status_code=400, detail="status kiritilishi shart")
-
-    db = load_db()
-    found_idx = -1
-    for i, a in enumerate(db):
-        if a.get("id") == appointment_id:
-            found_idx = i
-            break
-
-    if found_idx == -1:
-        raise HTTPException(status_code=404, detail="Qabul topilmadi")
-
-    db[found_idx]["status"] = new_status
-    save_db(db)
-    return {"status": "success", "appointment": db[found_idx]}
-
 @app.get("/api/appointments")
-
 def get_appointments():
     return load_db()
+
+# STATUS UPDATE ENDPOINT (PATCH)
+@app.patch("/api/appointments/{appointment_id}/status")
+async def update_appointment_status(appointment_id: str, payload: StatusUpdateModel):
+    async with appointment_lock:
+        db = load_db()
+        found = False
+        for a in db:
+            if a.get("id") == appointment_id:
+                a["status"] = payload.status
+                found = True
+                break
+        if not found:
+            raise HTTPException(status_code=404, detail="Qabul topilmadi")
+        save_db(db)
+    return {"status": "success", "appointmentId": appointment_id, "newStatus": payload.status}
 
 # 2. CONCURRENCY & DOUBLE-BOOKING PREVENTION
 @app.post("/api/appointments")
@@ -600,7 +627,6 @@ async def create_appointment(appt: AppointmentModel):
                     detail="Ushbu vaqt allaqachon boshqa bemor tomonidan band qilingan. Iltimos, boshqa vaqtni tanlang."
                 )
 
-        # Insert new appointment using Pydantic v2 model_dump()
         appt_dict = appt.model_dump() if hasattr(appt, "model_dump") else appt.dict()
         db.insert(0, appt_dict)
         save_db(db)
@@ -650,6 +676,18 @@ async def create_prescription(pres: PrescriptionModel):
         pres_dict["id"] = f"RX-{int(datetime.now().timestamp())}"
     if not pres_dict.get("prescribedAt"):
         pres_dict["prescribedAt"] = datetime.now(TASHKENT_TZ).isoformat()
+
+    # Normalize medicines -> medications
+    if pres_dict.get("medicines") and not pres_dict.get("medications"):
+        pres_dict["medications"] = []
+        for m in pres_dict["medicines"]:
+            pres_dict["medications"].append({
+                "name": m.get("name", "Dori vositasi"),
+                "dosage": m.get("dosage", ""),
+                "duration": m.get("duration", "5 kun"),
+                "frequency": m.get("frequency", ""),
+                "instructions": m.get("instructions", "") or m.get("frequency", "")
+            })
 
     existing_idx = next((i for i, p in enumerate(prescriptions) if p.get("appointmentId") == pres.appointmentId), None)
     if existing_idx is not None:
