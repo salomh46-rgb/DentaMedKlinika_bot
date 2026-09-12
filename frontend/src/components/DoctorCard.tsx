@@ -10,6 +10,42 @@ interface DoctorCardProps {
   doctors?: Doctor[];
 }
 
+const DoctorImage: React.FC<{ doc: Doctor }> = ({ doc }) => {
+  const [imgError, setImgError] = useState(false);
+  const initials = doc.name.replace('Dr. ', '').split(' ').map(n => n[0]).join('').slice(0, 2);
+  const defaultFallbackPhoto = doc.id % 2 === 0 ? '/images/doctors/dr_shahlo.jpg' : '/images/doctors/dr_jamshid.jpg';
+
+  if (imgError) {
+    return (
+      <div className="w-full h-full bg-gradient-to-br from-[#112E24] via-[#16382C] to-[#0A1F18] flex flex-col items-center justify-center relative overflow-hidden">
+        <div className="w-24 h-24 rounded-3xl bg-[#C5A880]/15 border border-[#C5A880]/50 flex items-center justify-center shadow-2xl mb-2 z-10 backdrop-blur-md">
+          <span className="font-serif text-3xl font-bold text-[#C5A880] tracking-widest">{initials}</span>
+        </div>
+        <div className="text-[10px] text-[#D6BF9F] font-bold tracking-[0.2em] uppercase z-10">
+          {doc.department === 'stomatology' ? 'Dental Expert' : 'ENT Surgeon'}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={doc.photo}
+      alt=""
+      onError={(e) => {
+        const target = e.currentTarget;
+        if (target.src !== defaultFallbackPhoto && !target.dataset.triedFallback) {
+          target.dataset.triedFallback = 'true';
+          target.src = defaultFallbackPhoto;
+        } else {
+          setImgError(true);
+        }
+      }}
+      className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
+    />
+  );
+};
+
 export const DoctorCard: React.FC<DoctorCardProps> = ({ lang, onBookDoctor, doctors = DOCTORS }) => {
   const [filterDept, setFilterDept] = useState<'all' | 'stomatology' | 'lor'>('all');
 
@@ -92,13 +128,9 @@ export const DoctorCard: React.FC<DoctorCardProps> = ({ lang, onBookDoctor, doct
             key={doc.id}
             className="group relative bg-white dark:bg-[#0E231B] rounded-3xl overflow-hidden border border-[#E8E2D8] dark:border-[#183F32] shadow-sm hover:shadow-xl hover:border-[#C5A880]/60 transition-all duration-300 flex flex-col"
           >
-            {/* HERO DOCTOR PORTRAIT WITH FLOATING GLASS PILLS */}
-            <div className="relative w-full h-72 sm:h-80 overflow-hidden bg-[#FAF8F5] dark:bg-[#07130F]">
-              <img
-                src={doc.photo}
-                alt={doc.name}
-                className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
-              />
+            {/* HERO DOCTOR PORTRAIT WITH INTELLECTUAL FALLBACK */}
+            <div className="relative w-full h-72 sm:h-80 overflow-hidden bg-[#112E24]">
+              <DoctorImage doc={doc} />
 
               {/* Gradient Scrim for readable badges */}
               <div className="absolute inset-0 bg-gradient-to-t from-[#112E24] via-[#112E24]/30 to-black/25 pointer-events-none"></div>
