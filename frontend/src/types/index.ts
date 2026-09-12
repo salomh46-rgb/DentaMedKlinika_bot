@@ -63,6 +63,7 @@ export type Department = 'stomatology' | 'lor';
 
 export interface Doctor {
   id: number;
+  tenantId?: TenantId;
   name: string;
   specialty: {
     uz: string;
@@ -74,11 +75,13 @@ export interface Doctor {
   reviewsCount: number;
   photo: string;
   availableDays: string[];
+  clinicId?: ClinicId;
   clinicIds?: ClinicId[];
 }
 
 export interface Service {
   id: number;
+  tenantId?: TenantId;
   department: Department;
   category: {
     uz: string;

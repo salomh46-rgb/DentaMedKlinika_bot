@@ -63,7 +63,11 @@ export const Header: React.FC<HeaderProps> = ({
           {isDirector ? (
             <span className="text-[#E5C9A4] font-bold flex items-center gap-1.5">
               <Crown className="w-3.5 h-3.5 text-[#E5C9A4]" />
-              <span>{lang === 'uz' ? '👑 Klinika Rahbari (Barcha 5 ta filial)' : '👑 Руководитель (Все 5 филиалов)'}</span>
+              <span>
+                {staffSession?.titleUz || (lang === 'uz' 
+                  ? `👑 ${activeClinic.tenantId === 'grandmed' ? 'GrandMed' : 'DentaMed'} Rahbari (Barcha ${branchesForTab.length} ta filial)` 
+                  : `👑 Руководитель (Все ${branchesForTab.length} филиала)`)}
+              </span>
             </span>
           ) : isReception ? (
             <span className="text-emerald-300 font-bold flex items-center gap-1">
@@ -274,6 +278,7 @@ export const Header: React.FC<HeaderProps> = ({
         {[
           { id: 'services', labelUz: 'Xizmatlar', labelRu: 'Услуги', icon: Sparkles },
           ...(isStaff ? [{ id: 'reception', labelUz: isDirector ? '👑 Boshqaruv (Kanban)' : '📋 Retsepshn', labelRu: isDirector ? '👑 Руководство' : '📋 Ресепшн', icon: null, highlight: true }] : []),
+          ...(isStaff && isDirector ? [{ id: 'owner_dashboard', labelUz: '⚙️ Sozlamalar', labelRu: '⚙️ Настройки', icon: null, highlight: true }] : []),
           { id: 'chart', labelUz: 'Tish Xaritasi', labelRu: 'Карта зубов', icon: null },
           { id: 'doctors', labelUz: 'Shifokorlar', labelRu: 'Врачи', icon: null },
           { id: 'gallery', labelUz: 'Natijalar (Oldin/Keyin)', labelRu: 'До / После', icon: null },

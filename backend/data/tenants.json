@@ -30,7 +30,19 @@
       "grandmed-markaziy",
       "grandmed-sergeli"
     ],
-    "createdAt": "2026-02-01T08:00:00+05:00"
+    "createdAt": "2026-02-01T08:00:00+05:00",
+    "promo": {
+      "titleUz": "Test Yangilangan Aksiya",
+      "titleRu": "Тестовая акция",
+      "badgeUz": "Aksiya",
+      "badgeRu": "Акция",
+      "discountPercent": 40,
+      "descUz": "Tavsif",
+      "descRu": "Описание",
+      "buttonTextUz": "Yozilish",
+      "buttonTextRu": "Записаться",
+      "isActive": true
+    }
   },
   {
     "id": "shifonurmed",
@@ -143,5 +155,33 @@
       "shifonurmed7-main"
     ],
     "createdAt": "2026-09-12T07:32:46.362395+05:00"
+  },
+  {
+    "id": "shifonurmed8",
+    "name": "Shifo Nur Med",
+    "ownerName": "Dr. Botir Qodirov",
+    "ownerPin": "18110",
+    "phone": "+998 71 200-77-77",
+    "email": "botir@shifonur.uz",
+    "logo": "/images/shifonurmed8_logo.png",
+    "status": "active",
+    "branchIds": [
+      "shifonurmed8-main"
+    ],
+    "createdAt": "2026-09-12T07:49:19.385445+05:00"
+  },
+  {
+    "id": "shifonurmed9",
+    "name": "Shifo Nur Med",
+    "ownerName": "Dr. Botir Qodirov",
+    "ownerPin": "19221",
+    "phone": "+998 71 200-77-77",
+    "email": "botir@shifonur.uz",
+    "logo": "/images/shifonurmed9_logo.png",
+    "status": "active",
+    "branchIds": [
+      "shifonurmed9-main"
+    ],
+    "createdAt": "2026-09-12T07:49:50.767314+05:00"
   }
 ]

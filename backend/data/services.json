@@ -19,7 +19,9 @@
     "duration": 20,
     "isPopular": true,
     "clinicId": "dentamed-nukus",
-    "clinicIds": ["dentamed-nukus"]
+    "clinicIds": [
+      "dentamed-nukus"
+    ]
   },
   {
     "id": 101,
@@ -41,7 +43,9 @@
     "duration": 40,
     "isPopular": true,
     "clinicId": "dentamed-chilonzor",
-    "clinicIds": ["dentamed-chilonzor"]
+    "clinicIds": [
+      "dentamed-chilonzor"
+    ]
   },
   {
     "id": 102,
@@ -63,7 +67,9 @@
     "duration": 60,
     "isPopular": true,
     "clinicId": "dentamed-nukus",
-    "clinicIds": ["dentamed-nukus"]
+    "clinicIds": [
+      "dentamed-nukus"
+    ]
   },
   {
     "id": 103,
@@ -85,7 +91,9 @@
     "duration": 50,
     "isPopular": false,
     "clinicId": "dentamed-chilonzor",
-    "clinicIds": ["dentamed-chilonzor"]
+    "clinicIds": [
+      "dentamed-chilonzor"
+    ]
   },
   {
     "id": 104,
@@ -107,7 +115,9 @@
     "duration": 35,
     "isPopular": true,
     "clinicId": "dentamed-nukus",
-    "clinicIds": ["dentamed-nukus"]
+    "clinicIds": [
+      "dentamed-nukus"
+    ]
   },
   {
     "id": 201,
@@ -129,7 +139,9 @@
     "duration": 25,
     "isPopular": true,
     "clinicId": "dentamed-chilonzor",
-    "clinicIds": ["dentamed-chilonzor"]
+    "clinicIds": [
+      "dentamed-chilonzor"
+    ]
   },
   {
     "id": 202,
@@ -151,7 +163,9 @@
     "duration": 20,
     "isPopular": true,
     "clinicId": "dentamed-nukus",
-    "clinicIds": ["dentamed-nukus"]
+    "clinicIds": [
+      "dentamed-nukus"
+    ]
   },
   {
     "id": 203,
@@ -173,7 +187,9 @@
     "duration": 20,
     "isPopular": false,
     "clinicId": "dentamed-chilonzor",
-    "clinicIds": ["dentamed-chilonzor"]
+    "clinicIds": [
+      "dentamed-chilonzor"
+    ]
   },
   {
     "id": 204,
@@ -195,7 +211,9 @@
     "duration": 30,
     "isPopular": true,
     "clinicId": "dentamed-nukus",
-    "clinicIds": ["dentamed-nukus"]
+    "clinicIds": [
+      "dentamed-nukus"
+    ]
   },
   {
     "id": 105,
@@ -217,7 +235,9 @@
     "duration": 45,
     "isPopular": true,
     "clinicId": "dentamed-yunusobod",
-    "clinicIds": ["dentamed-yunusobod"]
+    "clinicIds": [
+      "dentamed-yunusobod"
+    ]
   },
   {
     "id": 106,
@@ -239,7 +259,9 @@
     "duration": 60,
     "isPopular": true,
     "clinicId": "dentamed-samarqand",
-    "clinicIds": ["dentamed-samarqand"]
+    "clinicIds": [
+      "dentamed-samarqand"
+    ]
   },
   {
     "id": 205,
@@ -261,7 +283,9 @@
     "duration": 25,
     "isPopular": true,
     "clinicId": "dentamed-buxoro",
-    "clinicIds": ["dentamed-buxoro"]
+    "clinicIds": [
+      "dentamed-buxoro"
+    ]
   },
   {
     "id": 301,
@@ -283,7 +307,9 @@
     "duration": 90,
     "isPopular": true,
     "clinicId": "grandmed-markaziy",
-    "clinicIds": ["grandmed-markaziy"]
+    "clinicIds": [
+      "grandmed-markaziy"
+    ]
   },
   {
     "id": 302,
@@ -305,7 +331,9 @@
     "duration": 45,
     "isPopular": true,
     "clinicId": "grandmed-sergeli",
-    "clinicIds": ["grandmed-sergeli"]
+    "clinicIds": [
+      "grandmed-sergeli"
+    ]
   },
   {
     "id": 303,
@@ -327,6 +355,8 @@
     "duration": 30,
     "isPopular": true,
     "clinicId": "grandmed-markaziy",
-    "clinicIds": ["grandmed-markaziy"]
+    "clinicIds": [
+      "grandmed-markaziy"
+    ]
   }
 ]

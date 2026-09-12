@@ -37,7 +37,7 @@
     "telegramUserId": null
   },
   {
-    "id": "RX-1789180366",
+    "id": "RX-1789181390",
     "appointmentId": "MED-RX-TEST-99",
     "diagnosis": "Surunkali chuqur karies va o'tkir pulpitis asorati",
     "medications": [
@@ -65,7 +65,7 @@
     "doctorNotes": "Issiq va sovuq taomlardan 3 kun tiyilish, qattiq luqmalar chaynash tavsiya etilmaydi.",
     "customNotes": "",
     "nextVisitDate": "2026-09-20",
-    "prescribedAt": "2026-09-12T07:32:46.468521+05:00",
+    "prescribedAt": "2026-09-12T07:49:50.867962+05:00",
     "patientName": null,
     "phone": null,
     "doctorName": null,

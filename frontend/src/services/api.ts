@@ -41,7 +41,7 @@ export async function loginStaff(pin: string): Promise<{ ok: boolean; session?: 
   }
 
   // 2. GrandMed International Rahbari (Director of GrandMed branches)
-  if (cleanPin === '9999') {
+  if (cleanPin === '8888' || cleanPin === '9999') {
     const session: StaffSession = {
       role: 'clinic_director',
       tenantId: 'grandmed',

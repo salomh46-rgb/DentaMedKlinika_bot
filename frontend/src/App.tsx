@@ -14,6 +14,7 @@ import { MyAppointments } from './components/MyAppointments';
 import { EmergencyFloatingButton } from './components/EmergencyFloatingButton';
 import { DigitalTicketModal } from './components/DigitalTicketModal';
 import { ReceptionDashboard } from './components/ReceptionDashboard';
+import { ClinicOwnerDashboard } from './components/ClinicOwnerDashboard';
 import { Calendar, CheckCircle2, Shield, Award, Users, Building2, MapPin, Phone, Lock, Crown } from 'lucide-react';
 
 export function App() {
@@ -58,7 +59,7 @@ export function App() {
       setStaffSession(null);
       localStorage.removeItem('dentamed_is_staff');
       localStorage.removeItem('dentamed_staff_session');
-      if (activeTab === 'reception') {
+      if (activeTab === 'reception' || activeTab === 'owner_dashboard') {
         setActiveTab('services');
       }
       showToast(lang === 'uz' ? "Xodim rejimidan chiqildi" : "Вы вышли из режима сотрудника");
@@ -84,12 +85,15 @@ export function App() {
         setSelectedClinicId(res.session.clinicId);
         showToast(lang === 'uz' ? `Xush kelibsiz! ${res.session.titleUz} faollashtirildi` : `Добро пожаловать! ${res.session.titleRu}`);
       } else if (res.session.isDirector) {
-        showToast(lang === 'uz' ? "Xush kelibsiz! 👑 Klinika Rahbari (Barcha 5 ta filial) rejimi faol" : "Добро пожаловать! Режим руководителя активирован");
+        if (res.session.tenantId === 'grandmed') {
+          setSelectedClinicId('grandmed-markaziy');
+        }
+        showToast(lang === 'uz' ? `Xush kelibsiz! ${res.session.titleUz || '👑 Klinika Rahbari'} rejimi faol` : "Добро пожаловать! Режим руководителя активирован");
       } else {
         showToast(lang === 'uz' ? "Xush kelibsiz! Tizim boshqaruv paneli faol" : "Добро пожаловать! Панель управления активна");
       }
     } else {
-      setStaffPinError(res.error || (lang === 'uz' ? "Noto'g'ri PIN-kod! (Rahbar: 7777, Nukus: 1001)" : "Неверный PIN-код! (Пример: 7777, 1001)"));
+      setStaffPinError(res.error || (lang === 'uz' ? "Noto'g'ri PIN-kod! (Rahbar: 7777 / 8888, Nukus: 1001)" : "Неверный PIN-код! (Пример: 7777 / 8888, 1001)"));
     }
   };
 
@@ -282,9 +286,9 @@ export function App() {
         staffSession={staffSession}
       />
 
-      {/* Main Container - Expands for Reception Kanban */}
+      {/* Main Container - Expands for Reception Kanban & Owner Dashboard */}
       <main className={`mx-auto px-4 pt-4 transition-all duration-300 ${
-        activeTab === 'reception' && isStaff ? 'max-w-7xl' : 'max-w-xl'
+        (activeTab === 'reception' || activeTab === 'owner_dashboard') && isStaff ? 'max-w-7xl' : 'max-w-xl'
       }`}>
         {/* Toast alert */}
         {toastMessage && (
@@ -295,9 +299,10 @@ export function App() {
         )}
 
         {/* Cross Promotion Banner */}
-        {activeTab !== 'reception' && (
+        {activeTab !== 'reception' && activeTab !== 'owner_dashboard' && (
           <CrossPromoBanner
             lang={lang}
+            tenantId={currentTenant?.id || 'dentamed'}
             onClaim={() => {
               setSelectedService(services[4] || services[0]); // LOR Endoskopiya
               setSelectedDoctor(doctors[2] || doctors[0]);
@@ -316,6 +321,21 @@ export function App() {
             onSelectClinic={setSelectedClinicId}
             onRefresh={() => fetchAppointments().then(setReceptionAppointments)}
             staffSession={staffSession}
+          />
+        )}
+
+        {/* Clinic Owner Suite (Doctors CRUD + Photo Upload, Promo, Services, Staff PINs) */}
+        {activeTab === 'owner_dashboard' && isStaff && staffSession?.isDirector && (
+          <ClinicOwnerDashboard
+            lang={lang}
+            tenantId={currentTenant?.id || 'dentamed'}
+            tenantName={currentTenant?.name || 'DentaMed Atelier'}
+            clinics={tenantClinics}
+            doctors={doctors}
+            services={services}
+            onDoctorsChange={setDoctors}
+            onServicesChange={setServices}
+            onToast={showToast}
           />
         )}
 
@@ -514,20 +534,35 @@ export function App() {
             </div>
 
             {/* RBAC Quick Help Badges */}
-            <div className="text-[11px] bg-white dark:bg-[#07130F] p-3 rounded-2xl border border-[#E8E2D8] dark:border-[#183F32] mb-3 space-y-1.5 shadow-sm">
+            <div className="text-[11px] bg-white dark:bg-[#07130F] p-3 rounded-2xl border border-[#E8E2D8] dark:border-[#183F32] mb-3 space-y-2 shadow-sm">
               <div className="font-medium text-[#112E24] dark:text-[#FAF8F5] flex items-center justify-between">
                 <span className="flex items-center gap-1 font-semibold text-[#C5A880]">
                   <Crown className="w-3.5 h-3.5" />
-                  <span>Rahbar (Barcha 5 filial):</span>
+                  <span>DentaMed Rahbari:</span>
                 </span>
                 <button
                   type="button"
                   onClick={() => setStaffPin('7777')}
-                  className="font-mono bg-[#C5A880]/20 hover:bg-[#C5A880]/30 text-[#C5A880] px-2 py-0.5 rounded-lg font-bold transition"
+                  className="font-mono bg-[#C5A880]/20 hover:bg-[#C5A880]/30 text-[#C5A880] px-2.5 py-0.5 rounded-lg font-bold transition"
                 >
                   7777
                 </button>
               </div>
+
+              <div className="font-medium text-[#112E24] dark:text-[#FAF8F5] flex items-center justify-between pt-1 border-t border-[#E8E2D8]/60 dark:border-[#183F32]/60">
+                <span className="flex items-center gap-1 font-semibold text-[#60A5FA]">
+                  <Crown className="w-3.5 h-3.5" />
+                  <span>GrandMed Rahbari:</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setStaffPin('8888')}
+                  className="font-mono bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 px-2.5 py-0.5 rounded-lg font-bold transition"
+                >
+                  8888
+                </button>
+              </div>
+
               <div className="text-[#627068] dark:text-[#9FB1A7] pt-1.5 border-t border-[#E8E2D8]/60 dark:border-[#183F32]/60 grid grid-cols-2 gap-1.5 text-[10px]">
                 <button type="button" onClick={() => setStaffPin('1001')} className="flex items-center justify-between bg-[#FAF8F5] dark:bg-[#0E231B] px-2 py-1 rounded-md border border-[#E8E2D8] dark:border-[#183F32] hover:border-[#C5A880]">
                   <span>Nukus:</span> <b className="font-mono text-[#112E24] dark:text-[#FAF8F5]">1001</b>
@@ -535,19 +570,12 @@ export function App() {
                 <button type="button" onClick={() => setStaffPin('1002')} className="flex items-center justify-between bg-[#FAF8F5] dark:bg-[#0E231B] px-2 py-1 rounded-md border border-[#E8E2D8] dark:border-[#183F32] hover:border-[#C5A880]">
                   <span>Chilonzor:</span> <b className="font-mono text-[#112E24] dark:text-[#FAF8F5]">1002</b>
                 </button>
-                <button type="button" onClick={() => setStaffPin('1003')} className="flex items-center justify-between bg-[#FAF8F5] dark:bg-[#0E231B] px-2 py-1 rounded-md border border-[#E8E2D8] dark:border-[#183F32] hover:border-[#C5A880]">
-                  <span>Yunusobod:</span> <b className="font-mono text-[#112E24] dark:text-[#FAF8F5]">1003</b>
+                <button type="button" onClick={() => setStaffPin('2001')} className="flex items-center justify-between bg-[#FAF8F5] dark:bg-[#0E231B] px-2 py-1 rounded-md border border-[#E8E2D8] dark:border-[#183F32] hover:border-blue-400">
+                  <span>GrandMed 1:</span> <b className="font-mono text-[#112E24] dark:text-[#FAF8F5]">2001</b>
                 </button>
-                <button type="button" onClick={() => setStaffPin('1004')} className="flex items-center justify-between bg-[#FAF8F5] dark:bg-[#0E231B] px-2 py-1 rounded-md border border-[#E8E2D8] dark:border-[#183F32] hover:border-[#C5A880]">
-                  <span>Samarqand:</span> <b className="font-mono text-[#112E24] dark:text-[#FAF8F5]">1004</b>
+                <button type="button" onClick={() => setStaffPin('2002')} className="flex items-center justify-between bg-[#FAF8F5] dark:bg-[#0E231B] px-2 py-1 rounded-md border border-[#E8E2D8] dark:border-[#183F32] hover:border-blue-400">
+                  <span>GrandMed 2:</span> <b className="font-mono text-[#112E24] dark:text-[#FAF8F5]">2002</b>
                 </button>
-              </div>
-              <div className="text-[10px] text-center pt-1 text-[#627068] dark:text-[#9FB1A7]">
-                <span>Buxoro: </span>
-                <button type="button" onClick={() => setStaffPin('1005')} className="font-mono font-bold text-[#112E24] dark:text-[#FAF8F5] hover:underline">1005</button>
-                <span className="mx-1.5">|</span>
-                <span>GrandMed: </span>
-                <button type="button" onClick={() => setStaffPin('2001')} className="font-mono font-bold text-[#112E24] dark:text-[#FAF8F5] hover:underline">2001</button>
               </div>
             </div>
 
