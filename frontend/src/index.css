@@ -65,3 +65,26 @@ html.dark .glass-luxury {
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(197, 168, 128, 0.25);
 }
+
+/* Official 58mm / 80mm Thermal Receipt Print Styles */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #thermal-receipt-printable, #thermal-receipt-printable * {
+    visibility: visible;
+  }
+  #thermal-receipt-printable {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-family: 'Courier New', Courier, monospace !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+}

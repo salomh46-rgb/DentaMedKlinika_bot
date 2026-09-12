@@ -15,6 +15,7 @@ import { EmergencyFloatingButton } from './components/EmergencyFloatingButton';
 import { DigitalTicketModal } from './components/DigitalTicketModal';
 import { ReceptionDashboard } from './components/ReceptionDashboard';
 import { ClinicOwnerDashboard } from './components/ClinicOwnerDashboard';
+import { HospitalWebPortal } from './components/HospitalWebPortal';
 import { Calendar, CheckCircle2, Shield, Award, Users, Building2, MapPin, Phone, Lock, Crown } from 'lucide-react';
 
 export function App() {
@@ -26,6 +27,44 @@ export function App() {
   const [doctors, setDoctors] = useState<Doctor[]>(DOCTORS);
   const [services, setServices] = useState<Service[]>(SERVICES);
   const [receptionAppointments, setReceptionAppointments] = useState<Appointment[]>([]);
+
+  // Check if opened inside Telegram WebApp
+  const isTelegramPatient = useMemo(() => {
+    return !!(window.Telegram?.WebApp?.initData);
+  }, []);
+
+  // Web Hospital CRM Portal Mode (?view=portal, /portal, ?staff=1)
+  const [isPortalMode, setIsPortalMode] = useState<boolean>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const path = window.location.pathname;
+      if (
+        urlParams.get('view') === 'portal' ||
+        urlParams.get('portal') === '1' ||
+        urlParams.get('staff') === '1' ||
+        path.startsWith('/portal')
+      ) {
+        return true;
+      }
+      return localStorage.getItem('dentamed_portal_mode') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleExitPortal = () => {
+    setIsPortalMode(false);
+    localStorage.removeItem('dentamed_portal_mode');
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('view');
+      url.searchParams.delete('portal');
+      url.searchParams.delete('staff');
+      url.searchParams.delete('role');
+      url.searchParams.delete('admin');
+      window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
+    } catch {}
+  };
 
   // Staff Mode (Reception & Director access)
   const [staffSession, setStaffSession] = useState<StaffSession | null>(() => {
@@ -79,18 +118,21 @@ export function App() {
       localStorage.setItem('dentamed_is_staff', 'true');
       localStorage.setItem('dentamed_staff_session', JSON.stringify(res.session));
       setIsStaffModalOpen(false);
-      setActiveTab('reception');
+      
+      // Open Full-Screen Hospital Web Portal
+      setIsPortalMode(true);
+      localStorage.setItem('dentamed_portal_mode', 'true');
 
       if (res.session.role === 'reception' && res.session.clinicId) {
         setSelectedClinicId(res.session.clinicId);
-        showToast(lang === 'uz' ? `Xush kelibsiz! ${res.session.titleUz} faollashtirildi` : `Добро пожаловать! ${res.session.titleRu}`);
+        showToast(lang === 'uz' ? `Xush kelibsiz! ${res.session.titleUz} portali faollashtirildi` : `Добро пожаловать! ${res.session.titleRu}`);
       } else if (res.session.isDirector) {
         if (res.session.tenantId === 'grandmed') {
           setSelectedClinicId('grandmed-markaziy');
         }
-        showToast(lang === 'uz' ? `Xush kelibsiz! ${res.session.titleUz || '👑 Klinika Rahbari'} rejimi faol` : "Добро пожаловать! Режим руководителя активирован");
+        showToast(lang === 'uz' ? `Xush kelibsiz! ${res.session.titleUz || '👑 Klinika Rahbari'} portali faol` : "Добро пожаловать! Портал руководителя активирован");
       } else {
-        showToast(lang === 'uz' ? "Xush kelibsiz! Tizim boshqaruv paneli faol" : "Добро пожаловать! Панель управления активна");
+        showToast(lang === 'uz' ? "Xush kelibsiz! Hospital CRM portali faol" : "Добро пожаловать! Портал управления активен");
       }
     } else {
       setStaffPinError(res.error || (lang === 'uz' ? "Noto'g'ri PIN-kod! (Rahbar: 7777 / 8888, Nukus: 1001)" : "Неверный PIN-код! (Пример: 7777 / 8888, 1001)"));
@@ -267,6 +309,19 @@ export function App() {
       }
     );
   };
+
+  // 1. FULL-SCREEN INDEPENDENT ENTERPRISE MEDICAL CRM WEB PORTAL
+  if (isPortalMode) {
+    return (
+      <HospitalWebPortal
+        lang={lang}
+        onExitPortal={handleExitPortal}
+        staffSession={staffSession}
+        onToggleTheme={toggleTheme}
+        isDarkTheme={isDark}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#FAF8F5] dark:bg-[#07130F] text-[#1A221E] dark:text-[#FAF8F5] pb-24 font-sans transition-colors duration-300">
@@ -507,15 +562,17 @@ export function App() {
         </div>
       </div>
 
-      {/* Subtle Staff Portal Trigger in Footer */}
-      <div className="max-w-xl mx-auto px-4 py-6 text-center text-xs text-[#627068]/60 dark:text-[#9FB1A7]/40">
-        <button
-          onClick={handleToggleStaff}
-          className="hover:text-[#C5A880] transition inline-flex items-center gap-1.5 text-[11px] font-medium"
-        >
-          <span>{isStaff ? '🔑 Xodim / Retsepshn Rejimi Faol (Chiqish)' : '🔐 Xodimlar / Retsepshn Kirishi'}</span>
-        </button>
-      </div>
+      {/* Subtle Staff Portal Trigger in Footer - Strictly hidden inside Telegram WebApp for clean patient experience */}
+      {!isTelegramPatient && (
+        <div className="max-w-xl mx-auto px-4 py-6 text-center text-xs text-[#627068]/60 dark:text-[#9FB1A7]/40">
+          <button
+            onClick={handleToggleStaff}
+            className="hover:text-[#C5A880] transition inline-flex items-center gap-1.5 text-[11px] font-medium"
+          >
+            <span>{isStaff ? '🔑 Xodim / Retsepshn Rejimi Faol (Chiqish)' : '🔐 Xodimlar & Retsepshn Portali'}</span>
+          </button>
+        </div>
+      )}
 
       {/* Staff Passcode Verification Modal */}
       {isStaffModalOpen && (

@@ -34,9 +34,10 @@ SERVICES_FILE = DATA_DIR / "services.json"
 CLINICS_FILE = DATA_DIR / "clinics.json"
 PRESCRIPTIONS_FILE = DATA_DIR / "prescriptions.json"
 TENANTS_FILE = DATA_DIR / "tenants.json"
+DOCTOR_SCHEDULES_FILE = DATA_DIR / "doctor_schedules.json"
 
 # Ensure essential files exist
-for f_path in [DB_FILE, CLINICS_FILE, PRESCRIPTIONS_FILE, TENANTS_FILE]:
+for f_path in [DB_FILE, CLINICS_FILE, PRESCRIPTIONS_FILE, TENANTS_FILE, DOCTOR_SCHEDULES_FILE]:
     if not f_path.exists():
         with open(f_path, "w", encoding="utf-8") as f:
             json.dump([], f, ensure_ascii=False, indent=2)
@@ -57,6 +58,29 @@ def load_db() -> list:
 
 def save_db(data: list):
     save_json_file(DB_FILE, data)
+
+def load_doctor_schedules() -> list:
+    return load_json_file(DOCTOR_SCHEDULES_FILE)
+
+def save_doctor_schedules(data: list):
+    save_json_file(DOCTOR_SCHEDULES_FILE, data)
+
+def get_doctor_schedule(doctor_id: Union[int, str]) -> dict:
+    schedules = load_doctor_schedules()
+    try:
+        doc_id_int = int(doctor_id)
+    except Exception:
+        doc_id_int = doctor_id
+    for s in schedules:
+        if s.get("doctorId") == doc_id_int or str(s.get("doctorId")) == str(doctor_id):
+            return s
+    return {
+        "doctorId": doc_id_int,
+        "workingHours": {"start": "09:00", "end": "18:00"},
+        "lunchBreak": {"start": "13:00", "end": "14:00"},
+        "slotDuration": 30,
+        "leaves": []
+    }
 
 def get_clinic_by_id(clinic_id: Optional[str]) -> dict:
     clinics = load_json_file(CLINICS_FILE)
@@ -98,6 +122,16 @@ class AppointmentModel(BaseModel):
     telegramUsername: Optional[str] = None
     reminder24hSent: Optional[bool] = False
     reminder2hSent: Optional[bool] = False
+    paymentMethod: Optional[str] = "cash"
+
+class ScheduleUpdateModel(BaseModel):
+    workingHours: Optional[Dict[str, str]] = None
+    lunchBreak: Optional[Dict[str, str]] = None
+    slotDuration: Optional[int] = 30
+
+class LeaveModel(BaseModel):
+    date: str
+    reason: Optional[str] = "Ta'til / Dam olish"
 
 class StaffLoginModel(BaseModel):
     pinCode: Optional[str] = None
@@ -124,8 +158,6 @@ class MedicationItem(BaseModel):
 class PrescriptionModel(BaseModel):
     id: Optional[str] = None
     appointmentId: str
-    diagnosis: Optional[str] = "Klinik davolash kursi va reabilitatsiya"
-    medications: Optional[List[MedicationItem]] = []
     diagnosis: Optional[str] = "Stomatologik / LOR ko'rigi va muolajasi"
     medications: Optional[List[dict]] = []
     medicines: Optional[List[dict]] = []
@@ -147,12 +179,64 @@ MedicationItem.model_rebuild()
 PrescriptionModel.model_rebuild()
 AppointmentModel.model_rebuild()
 StatusUpdateModel.model_rebuild()
+ScheduleUpdateModel.model_rebuild()
+LeaveModel.model_rebuild()
+
+# SMS Xabarnoma Zaxira Shlyuzi (Eskiz.uz / SMS Gateway Helper & In-Memory Logs)
+SMS_SENT_LOGS: List[Dict[str, Any]] = []
+
+async def send_sms_notification(phone: str, message: str) -> dict:
+    """
+    Eskiz.uz SMS Gateway asinxron yordamchisi.
+    Telegram foydalanuvchisi mavjud bo'lmaganda yoki Telegram orqali yuborishda
+    xatolik yuz berganda zaxira (fallback) sifatida mijoz telefoniga SMS yuboradi.
+    """
+    clean_phone = "".join(c for c in phone if c.isdigit() or c == "+")
+    if not clean_phone.startswith("+") and len(clean_phone) == 12 and clean_phone.startswith("998"):
+        clean_phone = "+" + clean_phone
+    elif not clean_phone.startswith("+998") and len(clean_phone) == 9:
+        clean_phone = "+998" + clean_phone
+
+    log_entry = {
+        "timestamp": datetime.now(TASHKENT_TZ).isoformat(),
+        "phone": clean_phone,
+        "message": message,
+        "gateway": "eskiz_uz",
+        "status": "sent",
+        "simulated": True
+    }
+
+    eskiz_token = os.getenv("ESKIZ_TOKEN")
+    if eskiz_token and clean_phone:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.post(
+                    "https://notify.eskiz.uz/api/message/sms/send",
+                    headers={"Authorization": f"Bearer {eskiz_token}"},
+                    json={
+                        "mobile_phone": clean_phone.replace("+", ""),
+                        "message": message,
+                        "from": "4546"
+                    }
+                )
+                if resp.status_code == 200:
+                    log_entry["status"] = "delivered"
+                    log_entry["simulated"] = False
+        except Exception as e:
+            print(f"[SMS Gateway Eskiz] Real API xatolik, simulatsiya rejimida loglandi: {e}")
+
+    SMS_SENT_LOGS.append(log_entry)
+    print(f"[SMS Gateway - Eskiz.uz] SMS muvaffaqiyatli yuborildi -> Telefon: {clean_phone} | Xabar: {message[:60]}...")
+    return {
+        "success": True,
+        "status": "sent",
+        "phone": clean_phone,
+        "message": message,
+        "gateway": "eskiz_uz"
+    }
 
 async def notify_patient(appt: AppointmentModel):
-    """Send formal booking confirmation receipt directly to the patient's Telegram chat"""
-    if not BOT_TOKEN or not appt.telegramUserId:
-        return
-
+    """Send formal booking confirmation receipt directly to the patient's Telegram chat, fallback to SMS"""
     doc_name = appt.doctor.get("name", "Shifokor")
     doc_spec = appt.doctor.get("specialty", {}).get("uz", "Mutaxassis")
     srv_title = appt.service.get("title", {}).get("uz", "Xizmat")
@@ -164,49 +248,61 @@ async def notify_patient(appt: AppointmentModel):
     clinic_phone = clinic.get("phone", "+998 (71) 200-00-00")
 
     final_price = appt.totalAmount if appt.totalAmount is not None else price
-    teeth_info = ""
-    if appt.selectedTeethNumbers:
-        teeth_str = ", ".join(f"№{n}" for n in appt.selectedTeethNumbers)
-        teeth_info = f"🦷 <b>Davolanadigan tishlar:</b> {teeth_str}\n"
 
-    promo_info = ""
-    if appt.hasPromoUltrasonic:
-        promo_info = "🎁 <b>Kross-Aksiya:</b> Ultratovushli tozalash 50% chegirmada (-200,000 so'm) hisoblandi!\n"
+    if BOT_TOKEN and appt.telegramUserId:
+        teeth_info = ""
+        if appt.selectedTeethNumbers:
+            teeth_str = ", ".join(f"№{n}" for n in appt.selectedTeethNumbers)
+            teeth_info = f"🦷 <b>Davolanadigan tishlar:</b> {teeth_str}\n"
 
-    patient_msg = (
-        f"🎉 <b>QABULINGIZ TASDIQLANDI!</b>\n"
-        f"────────────────────────\n"
-        f"👤 <b>Hurmatli {appt.patientName}!</b>\n"
-        f"Siz <b>{clinic_name}</b>da shifokor ko'rigiga muvaffaqiyatli yozildingiz.\n\n"
-        f"👨‍⚕️ <b>Shifokor:</b> {doc_name}\n"
-        f"💼 <b>Mutaxassisligi:</b> {doc_spec}\n"
-        f"🩺 <b>Tanlangan xizmat:</b> {srv_title}\n"
-        f"{teeth_info}"
-        f"{promo_info}"
-        f"📅 <b>Qabul sanasi:</b> {appt.date}\n"
-        f"⏰ <b>Qabul vaqti:</b> soat {appt.time}\n"
-        f"💰 <b>To'lov summasi:</b> {final_price:,} so'm\n"
-        f"────────────────────────\n"
-        f"🎫 <b>Qabul Taloningiz:</b> <code>#{appt.id}</code>\n"
-        f"🔑 <b>Retsepshnda aytiladigan PIN-kod:</b> <code>{appt.pinCode}</code>\n\n"
-        f"📍 <b>Filial manzili:</b> {clinic_addr}\n\n"
-        f"ℹ️ <i>Iltimos, belgilangan vaqtdan 5-10 daqiqa oldinroq tashrif buyuring. Retsepshnga ushbu <b>{appt.pinCode}</b> kodini ko'rsatib navbatsiz qabulga o'tasiz.</i>\n\n"
-        f"📞 <b>Tezkor yordam:</b> {clinic_phone} | @dentamed_admin"
+        promo_info = ""
+        if appt.hasPromoUltrasonic:
+            promo_info = "🎁 <b>Kross-Aksiya:</b> Ultratovushli tozalash 50% chegirmada (-200,000 so'm) hisoblandi!\n"
+
+        patient_msg = (
+            f"🎉 <b>QABULINGIZ TASDIQLANDI!</b>\n"
+            f"────────────────────────\n"
+            f"👤 <b>Hurmatli {appt.patientName}!</b>\n"
+            f"Siz <b>{clinic_name}</b>da shifokor ko'rigiga muvaffaqiyatli yozildingiz.\n\n"
+            f"👨‍⚕️ <b>Shifokor:</b> {doc_name}\n"
+            f"💼 <b>Mutaxassisligi:</b> {doc_spec}\n"
+            f"🩺 <b>Tanlangan xizmat:</b> {srv_title}\n"
+            f"{teeth_info}"
+            f"{promo_info}"
+            f"📅 <b>Qabul sanasi:</b> {appt.date}\n"
+            f"⏰ <b>Qabul vaqti:</b> soat {appt.time}\n"
+            f"💰 <b>To'lov summasi:</b> {final_price:,} so'm\n"
+            f"────────────────────────\n"
+            f"🎫 <b>Qabul Taloningiz:</b> <code>#{appt.id}</code>\n"
+            f"🔑 <b>Retsepshnda aytiladigan PIN-kod:</b> <code>{appt.pinCode}</code>\n\n"
+            f"📍 <b>Filial manzili:</b> {clinic_addr}\n\n"
+            f"ℹ️ <i>Iltimos, belgilangan vaqtdan 5-10 daqiqa oldinroq tashrif buyuring. Retsepshnga ushbu <b>{appt.pinCode}</b> kodini ko'rsatib navbatsiz qabulga o'tasiz.</i>\n\n"
+            f"📞 <b>Tezkor yordam:</b> {clinic_phone} | @dentamed_admin"
+        )
+
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": appt.telegramUserId,
+            "text": patient_msg,
+            "parse_mode": "HTML"
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(url, json=payload)
+                if resp.status_code == 200:
+                    print(f"Sent message to patient {appt.telegramUserId}: status {resp.status_code}")
+                    return
+        except Exception as e:
+            print(f"Error sending message to patient Telegram, fallback to SMS: {e}")
+
+    # Fallback to SMS Gateway
+    sms_msg = (
+        f"DentaMed: Hurmatli {appt.patientName}, qabulingiz tasdiqlandi! "
+        f"Sana: {appt.date}, Soat: {appt.time}. Talon: #{appt.id}, PIN: {appt.pinCode}. "
+        f"Shifokor: {doc_name}. Filial: {clinic_name}. Tel: {clinic_phone}"
     )
-
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": appt.telegramUserId,
-        "text": patient_msg,
-        "parse_mode": "HTML"
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(url, json=payload)
-            print(f"Sent message to patient {appt.telegramUserId}: status {resp.status_code}")
-    except Exception as e:
-        print(f"Error sending message to patient: {e}")
+    await send_sms_notification(appt.phone, sms_msg)
 
 async def notify_admin_group(appt: AppointmentModel):
     """Notify clinic admin group if configured"""
@@ -247,102 +343,122 @@ async def notify_admin_group(appt: AppointmentModel):
         print(f"Error sending to admin group: {e}")
 
 async def send_24h_reminder(appt: dict) -> bool:
-    if not BOT_TOKEN or not appt.get("telegramUserId"):
-        return False
-
     clinic_id = appt.get("clinicId", "dentamed-nukus")
     clinic = get_clinic_by_id(clinic_id)
     doc_name = appt.get("doctor", {}).get("name", "Shifokor")
     srv_title = appt.get("service", {}).get("title", {}).get("uz", "Tibbiy xizmat")
 
-    msg = (
-        f"⏰ <b>QABULINGIZGA 24 SOAT QOLDI! (ESLATMA)</b>\n"
-        f"────────────────────────\n"
-        f"👤 <b>Hurmatli {appt.get('patientName')}!</b>\n\n"
-        f"Ertaga <b>{clinic.get('name')}</b>da shifokor ko'rigingiz rejalashtirilgan:\n\n"
-        f"👨‍⚕️ <b>Shifokor:</b> {doc_name}\n"
-        f"🩺 <b>Xizmat:</b> {srv_title}\n"
-        f"📅 <b>Sana:</b> {appt.get('date')}\n"
-        f"⏰ <b>Vaqt:</b> soat {appt.get('time')}\n"
-        f"🎫 <b>Talon:</b> <code>#{appt.get('id')}</code>\n"
-        f"🔑 <b>PIN-kod:</b> <code>{appt.get('pinCode')}</code>\n"
-        f"📍 <b>Manzil:</b> {clinic.get('address')}\n"
-        f"────────────────────────\n"
-        f"Iltimos, tashrifingizni tasdiqlang:"
-    )
+    if BOT_TOKEN and appt.get("telegramUserId"):
+        msg = (
+            f"⏰ <b>QABULINGIZGA 24 SOAT QOLDI! (ESLATMA)</b>\n"
+            f"────────────────────────\n"
+            f"👤 <b>Hurmatli {appt.get('patientName')}!</b>\n\n"
+            f"Ertaga <b>{clinic.get('name')}</b>da shifokor ko'rigingiz rejalashtirilgan:\n\n"
+            f"👨‍⚕️ <b>Shifokor:</b> {doc_name}\n"
+            f"🩺 <b>Xizmat:</b> {srv_title}\n"
+            f"📅 <b>Sana:</b> {appt.get('date')}\n"
+            f"⏰ <b>Vaqt:</b> soat {appt.get('time')}\n"
+            f"🎫 <b>Talon:</b> <code>#{appt.get('id')}</code>\n"
+            f"🔑 <b>PIN-kod:</b> <code>{appt.get('pinCode')}</code>\n"
+            f"📍 <b>Manzil:</b> {clinic.get('address')}\n"
+            f"────────────────────────\n"
+            f"Iltimos, tashrifingizni tasdiqlang:"
+        )
 
-    inline_keyboard = {
-        "inline_keyboard": [
-            [
-                {"text": "✅ Ha, boraman", "callback_data": f"rem_confirm_{appt.get('id')}"},
-                {"text": "❌ Bekor qilish", "callback_data": f"rem_cancel_{appt.get('id')}"}
-            ],
-            [
-                {"text": "🔄 Vaqtni ko'chirish", "callback_data": f"rem_resched_{appt.get('id')}"}
+        inline_keyboard = {
+            "inline_keyboard": [
+                [
+                    {"text": "✅ Ha, boraman", "callback_data": f"rem_confirm_{appt.get('id')}"},
+                    {"text": "❌ Bekor qilish", "callback_data": f"rem_cancel_{appt.get('id')}"}
+                ],
+                [
+                    {"text": "🔄 Vaqtni ko'chirish", "callback_data": f"rem_resched_{appt.get('id')}"}
+                ]
             ]
-        ]
-    }
+        }
 
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": appt.get("telegramUserId"),
-        "text": msg,
-        "parse_mode": "HTML",
-        "reply_markup": inline_keyboard
-    }
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": appt.get("telegramUserId"),
+            "text": msg,
+            "parse_mode": "HTML",
+            "reply_markup": inline_keyboard
+        }
 
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(url, json=payload)
-            return resp.status_code == 200
-    except Exception as e:
-        print(f"Error sending 24h reminder: {e}")
-        return False
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(url, json=payload)
+                if resp.status_code == 200:
+                    return True
+        except Exception as e:
+            print(f"Error sending 24h reminder via Telegram, fallback to SMS: {e}")
+
+    # Fallback to SMS Gateway
+    patient_phone = appt.get("phone")
+    if patient_phone:
+        sms_msg = (
+            f"DentaMed Eslatma: Hurmatli {appt.get('patientName')}, ertaga soat {appt.get('time')} da "
+            f"shifokor {doc_name} qabulidasiz. PIN: {appt.get('pinCode')}. Manzil: {clinic.get('address')}"
+        )
+        await send_sms_notification(patient_phone, sms_msg)
+        return True
+
+    return False
 
 async def send_2h_reminder(appt: dict) -> bool:
-    if not BOT_TOKEN or not appt.get("telegramUserId"):
-        return False
-
     clinic_id = appt.get("clinicId", "dentamed-nukus")
     clinic = get_clinic_by_id(clinic_id)
     doc_name = appt.get("doctor", {}).get("name", "Shifokor")
 
-    msg = (
-        f"🔔 <b>QABULINGIZGA 2 SOAT QOLDI!</b>\n"
-        f"────────────────────────\n"
-        f"👤 <b>Hurmatli {appt.get('patientName')}!</b>\n"
-        f"Shifokoringiz <b>{doc_name}</b> sizni kutmoqda.\n\n"
-        f"⏰ <b>Qabul vaqti:</b> soat {appt.get('time')}\n"
-        f"🔑 <b>Retsepshn PIN-kodingiz:</b> <code>{appt.get('pinCode')}</code>\n\n"
-        f"🏥 <b>Klinika:</b> {clinic.get('name')}\n"
-        f"📍 <b>Manzil:</b> {clinic.get('address')}\n"
-        f"🏢 <b>Mo'ljal:</b> {clinic.get('landmark')}\n"
-        f"📞 <b>Aloqa:</b> {clinic.get('phone')}\n"
-        f"────────────────────────\n"
-        f"🚕 <i>Yo'l tirbandligini inobatga olib, 10-15 daqiqa oldinroq kelishingizni iltimos qilamiz.</i>"
-    )
+    if BOT_TOKEN and appt.get("telegramUserId"):
+        msg = (
+            f"🔔 <b>QABULINGIZGA 2 SOAT QOLDI!</b>\n"
+            f"────────────────────────\n"
+            f"👤 <b>Hurmatli {appt.get('patientName')}!</b>\n"
+            f"Shifokoringiz <b>{doc_name}</b> sizni kutmoqda.\n\n"
+            f"⏰ <b>Qabul vaqti:</b> soat {appt.get('time')}\n"
+            f"🔑 <b>Retsepshn PIN-kodingiz:</b> <code>{appt.get('pinCode')}</code>\n\n"
+            f"🏥 <b>Klinika:</b> {clinic.get('name')}\n"
+            f"📍 <b>Manzil:</b> {clinic.get('address')}\n"
+            f"🏢 <b>Mo'ljal:</b> {clinic.get('landmark')}\n"
+            f"📞 <b>Aloqa:</b> {clinic.get('phone')}\n"
+            f"────────────────────────\n"
+            f"🚕 <i>Yo'l tirbandligini inobatga olib, 10-15 daqiqa oldinroq kelishingizni iltimos qilamiz.</i>"
+        )
 
-    url_text = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    url_loc = f"https://api.telegram.org/bot{BOT_TOKEN}/sendLocation"
-    loc = clinic.get("location", {"lat": 41.2995, "lng": 69.2401})
+        url_text = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        url_loc = f"https://api.telegram.org/bot{BOT_TOKEN}/sendLocation"
+        loc = clinic.get("location", {"lat": 41.2995, "lng": 69.2401})
 
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp1 = await client.post(url_text, json={
-                "chat_id": appt.get("telegramUserId"),
-                "text": msg,
-                "parse_mode": "HTML"
-            })
-            if loc and "lat" in loc and "lng" in loc:
-                await client.post(url_loc, json={
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp1 = await client.post(url_text, json={
                     "chat_id": appt.get("telegramUserId"),
-                    "latitude": loc["lat"],
-                    "longitude": loc["lng"]
+                    "text": msg,
+                    "parse_mode": "HTML"
                 })
-            return resp1.status_code == 200
-    except Exception as e:
-        print(f"Error sending 2h reminder: {e}")
-        return False
+                if loc and "lat" in loc and "lng" in loc:
+                    await client.post(url_loc, json={
+                        "chat_id": appt.get("telegramUserId"),
+                        "latitude": loc["lat"],
+                        "longitude": loc["lng"]
+                    })
+                if resp1.status_code == 200:
+                    return True
+        except Exception as e:
+            print(f"Error sending 2h reminder via Telegram, fallback to SMS: {e}")
+
+    # Fallback to SMS Gateway
+    patient_phone = appt.get("phone")
+    if patient_phone:
+        sms_msg = (
+            f"DentaMed: Hurmatli {appt.get('patientName')}, 2 soatdan so'ng (soat {appt.get('time')}) "
+            f"shifokor {doc_name} qabulidasiz. PIN: {appt.get('pinCode')}. Tel: {clinic.get('phone')}"
+        )
+        await send_sms_notification(patient_phone, sms_msg)
+        return True
+
+    return False
 
 async def check_and_send_reminders() -> int:
     db = load_db()
@@ -399,9 +515,6 @@ async def reminder_cron_loop():
         await asyncio.sleep(60)
 
 async def notify_prescription(pres: dict, appt: Optional[dict] = None):
-    if not BOT_TOKEN:
-        return
-
     telegram_user_id = pres.get("telegramUserId")
     patient_name = pres.get("patientName") or "Hurmatli bemor"
     doc_name = pres.get("doctorName") or "Shifokor"
@@ -419,68 +532,74 @@ async def notify_prescription(pres: dict, appt: Optional[dict] = None):
         clinic = get_clinic_by_id(clinic_id)
         clinic_name = clinic.get("name", "DentaMed Atelier")
 
-    if not telegram_user_id:
-        return
-
-    meds_text = ""
-    meds_list = pres.get("medications") or []
-    for idx, med in enumerate(meds_list, 1):
-        instr = med.get("instructions") or med.get("frequency") or ""
-        instr_text = f" ({instr})" if instr else ""
-        meds_text += f"{idx}. 💊 <b>{med.get('name')}</b> — {med.get('dosage')}\n   ⏱ Qabul davomiyligi: {med.get('duration', '5 kun')}{instr_text}\n"
-
-    # Also check if recommendations exist
-    rec_text = ""
-    recs = pres.get("recommendations")
-    if recs:
-        if isinstance(recs, list):
-            rec_text = "💡 <b>Tavsiyalar:</b>\n" + "\n".join(f"• {r}" for r in recs) + "\n"
-        elif isinstance(recs, str):
-            rec_text = f"💡 <b>Tavsiyalar:</b>\n{recs}\n"
-
-    next_visit = pres.get("nextVisitDate")
-    next_visit_text = f"📅 <b>Keyingi nazorat ko'rigi:</b> {next_visit}\n" if next_visit else ""
-    
-    doc_notes = pres.get("doctorNotes") or pres.get("customNotes")
-    notes_text = f"📝 <b>Shifokor xulosasi:</b>\n{doc_notes}\n" if doc_notes else ""
-
+    patient_phone = pres.get("phone") or (appt.get("phone") if appt else "")
     diagnosis = pres.get("diagnosis", "Klinik tekshiruv va davolash kursi")
 
-    rx_msg = (
-        f"🇨🇭 <b>DENTAMED ATELIER | RAQAMLI RETSEPT</b>\n"
-        f"<i>Swiss Dental & ENT Quality Standards • Rasmiy Hujjat</i>\n"
-        f"────────────────────────\n"
-        f"📋 <b>Retsept raqami:</b> <code>#{pres.get('id')}</code>\n"
-        f"🎫 <b>Qabul Taloni:</b> <code>#{pres.get('appointmentId')}</code>\n"
-        f"👤 <b>Bemor:</b> {patient_name}\n"
-        f"👨‍⚕️ <b>Davolovchi shifokor:</b> {doc_name}\n"
-        f"🏥 <b>Klinika:</b> {clinic_name}\n"
-        f"📅 <b>Berilgan sana:</b> {datetime.now(TASHKENT_TZ).strftime('%d.%m.%Y, %H:%M')}\n"
-        f"────────────────────────\n"
-        f"🔍 <b>Tashxis:</b>\n"
-        f"<b>{diagnosis}</b>\n\n"
-        f"💊 <b>BELGILANGAN DORI VOSITALARI:</b>\n"
-        f"{meds_text or 'Ko\'rsatilmagan'}\n"
-        f"{rec_text}"
-        f"{notes_text}"
-        f"{next_visit_text}"
-        f"────────────────────────\n"
-        f"🛡️ <i>Ushbu retsept Shveysariya xalqaro standartlari asosida raqamli elektron imzo bilan tasdiqlangan va barcha dorixonalarda amal qiladi.</i>\n\n"
-        f"📞 <b>Aloqa:</b> +998 (71) 200-00-00 | @dentamed_admin"
-    )
+    if BOT_TOKEN and telegram_user_id:
+        meds_text = ""
+        meds_list = pres.get("medications") or []
+        for idx, med in enumerate(meds_list, 1):
+            instr = med.get("instructions") or med.get("frequency") or ""
+            instr_text = f" ({instr})" if instr else ""
+            meds_text += f"{idx}. 💊 <b>{med.get('name')}</b> — {med.get('dosage')}\n   ⏱ Qabul davomiyligi: {med.get('duration', '5 kun')}{instr_text}\n"
 
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": telegram_user_id,
-        "text": rx_msg,
-        "parse_mode": "HTML"
-    }
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(url, json=payload)
-            print(f"Prescription #{pres.get('id')} sent to patient {telegram_user_id}: status {resp.status_code}")
-    except Exception as e:
-        print(f"Error sending prescription: {e}")
+        # Also check if recommendations exist
+        rec_text = ""
+        recs = pres.get("recommendations")
+        if recs:
+            if isinstance(recs, list):
+                rec_text = "💡 <b>Tavsiyalar:</b>\n" + "\n".join(f"• {r}" for r in recs) + "\n"
+            elif isinstance(recs, str):
+                rec_text = f"💡 <b>Tavsiyalar:</b>\n{recs}\n"
+
+        next_visit = pres.get("nextVisitDate")
+        next_visit_text = f"📅 <b>Keyingi nazorat ko'rigi:</b> {next_visit}\n" if next_visit else ""
+
+        doc_notes = pres.get("doctorNotes") or pres.get("customNotes")
+        notes_text = f"📝 <b>Shifokor xulosasi:</b>\n{doc_notes}\n" if doc_notes else ""
+
+        rx_msg = (
+            f"🇨🇭 <b>DENTAMED ATELIER | RAQAMLI RETSEPT</b>\n"
+            f"<i>Swiss Dental & ENT Quality Standards • Rasmiy Hujjat</i>\n"
+            f"────────────────────────\n"
+            f"📋 <b>Retsept raqami:</b> <code>#{pres.get('id')}</code>\n"
+            f"🎫 <b>Qabul Taloni:</b> <code>#{pres.get('appointmentId')}</code>\n"
+            f"👤 <b>Bemor:</b> {patient_name}\n"
+            f"👨‍⚕️ <b>Davolovchi shifokor:</b> {doc_name}\n"
+            f"🏥 <b>Klinika:</b> {clinic_name}\n"
+            f"📅 <b>Berilgan sana:</b> {datetime.now(TASHKENT_TZ).strftime('%d.%m.%Y, %H:%M')}\n"
+            f"────────────────────────\n"
+            f"🔍 <b>Tashxis:</b>\n"
+            f"<b>{diagnosis}</b>\n\n"
+            f"💊 <b>BELGILANGAN DORI VOSITALARI:</b>\n"
+            f"{meds_text or 'Ko\'rsatilmagan'}\n"
+            f"{rec_text}"
+            f"{notes_text}"
+            f"{next_visit_text}"
+            f"────────────────────────\n"
+            f"🛡️ <i>Ushbu retsept Shveysariya xalqaro standartlari asosida raqamli elektron imzo bilan tasdiqlangan va barcha dorixonalarda amal qiladi.</i>\n\n"
+            f"📞 <b>Aloqa:</b> +998 (71) 200-00-00 | @dentamed_admin"
+        )
+
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": telegram_user_id,
+            "text": rx_msg,
+            "parse_mode": "HTML"
+        }
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(url, json=payload)
+                if resp.status_code == 200:
+                    print(f"Prescription #{pres.get('id')} sent to patient {telegram_user_id}: status {resp.status_code}")
+                    return
+        except Exception as e:
+            print(f"Error sending prescription via Telegram: {e}")
+
+    # Fallback to SMS Gateway
+    if patient_phone:
+        sms_text = f"DentaMed Retsept #{pres.get('id')}: Hurmatli {patient_name}, davolovchi shifokor {doc_name} sizga raqamli retsept biriktirdi. Tashxis: {diagnosis}."
+        await send_sms_notification(patient_phone, sms_text)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -777,6 +896,89 @@ def get_tenant_analytics(tenant_id: str):
         "topDoctors": top_doctors
     }
 
+# 2. MOLIYAVIY KASSA VA SHIFOKORLAR KPI ULUSHI ENDPOINTI
+@app.get("/api/tenants/{tenant_id}/financials")
+def get_tenant_financials(tenant_id: str):
+    tenants = load_json_file(TENANTS_FILE)
+    tenant = next((t for t in tenants if t.get("id") == tenant_id), None)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant topilmadi")
+
+    all_appts = load_db()
+    tenant_appts = [a for a in all_appts if a.get("tenantId") == tenant_id]
+
+    total_revenue = 0
+    payment_breakdown = {
+        "cash": 0,
+        "card": 0,
+        "online": 0
+    }
+    doctor_stats = {}
+
+    for a in tenant_appts:
+        if a.get("status") in ["completed", "confirmed"]:
+            amt = a.get("totalAmount")
+            if amt is None:
+                amt = a.get("service", {}).get("price", 0)
+            total_revenue += amt
+
+            # To'lov turi taqsimoti
+            raw_method = str(a.get("paymentMethod") or "cash").lower()
+            if raw_method in ["cash", "naqd"]:
+                payment_breakdown["cash"] += amt
+            elif raw_method in ["card", "terminal", "karta", "uzcard", "humo"]:
+                payment_breakdown["card"] += amt
+            elif raw_method in ["online", "click", "payme", "uzum"]:
+                payment_breakdown["online"] += amt
+            else:
+                payment_breakdown["cash"] += amt
+
+            # Shifokorlar kesimidagi statistika
+            doc = a.get("doctor", {})
+            doc_id = doc.get("id")
+            if doc_id:
+                if doc_id not in doctor_stats:
+                    doc_spec = doc.get("specialty", {})
+                    spec_str = doc_spec.get("uz") if isinstance(doc_spec, dict) else str(doc_spec or "")
+                    doctor_stats[doc_id] = {
+                        "doctorId": doc_id,
+                        "doctorName": doc.get("name", f"Shifokor #{doc_id}"),
+                        "specialty": spec_str,
+                        "treatmentsCount": 0,
+                        "totalRevenue": 0,
+                        "commissionRate": 0.30,
+                        "commissionAmount": 0
+                    }
+                doctor_stats[doc_id]["treatmentsCount"] += 1
+                doctor_stats[doc_id]["totalRevenue"] += amt
+                doctor_stats[doc_id]["commissionAmount"] = round(doctor_stats[doc_id]["totalRevenue"] * 0.30)
+
+    doctor_commission_list = sorted(
+        list(doctor_stats.values()),
+        key=lambda d: (d["totalRevenue"], d["treatmentsCount"]),
+        reverse=True
+    )
+
+    return {
+        "status": "success",
+        "tenantId": tenant_id,
+        "tenantName": tenant.get("name"),
+        "currency": "UZS",
+        "totalRevenue": total_revenue,
+        "paymentBreakdown": payment_breakdown,
+        "doctorCommission": doctor_commission_list,
+        "doctors": doctor_commission_list
+    }
+
+# SMS XABARLAR LOGLARI ENDPOINTI
+@app.get("/api/sms/logs")
+def get_sms_logs():
+    return {
+        "status": "success",
+        "count": len(SMS_SENT_LOGS),
+        "logs": SMS_SENT_LOGS
+    }
+
 @app.get("/api/clinics")
 def get_clinics(tenantId: Optional[str] = Query(None)):
     clinics = load_json_file(CLINICS_FILE)
@@ -928,6 +1130,98 @@ def delete_doctor(doctor_id: int):
     save_json_file(DOCTORS_FILE, new_doctors)
     return {"status": "success", "message": "Shifokor o'chirildi"}
 
+# 2.1 SHIFOKOR ISH JADVALI VA TA'TILLARNI BOSHQARISH ENDPOINTLARI
+@app.get("/api/doctors/{doctor_id}/schedule")
+def get_doctor_schedule_endpoint(doctor_id: int):
+    return get_doctor_schedule(doctor_id)
+
+@app.post("/api/doctors/{doctor_id}/schedule")
+async def update_doctor_schedule_endpoint(doctor_id: int, payload: ScheduleUpdateModel):
+    schedules = load_doctor_schedules()
+    target_idx = None
+    for i, s in enumerate(schedules):
+        if s.get("doctorId") == doctor_id:
+            target_idx = i
+            break
+
+    if target_idx is not None:
+        target = schedules[target_idx]
+        if payload.workingHours is not None:
+            target["workingHours"] = payload.workingHours
+        if payload.lunchBreak is not None:
+            target["lunchBreak"] = payload.lunchBreak
+        if payload.slotDuration is not None:
+            target["slotDuration"] = payload.slotDuration
+        schedules[target_idx] = target
+    else:
+        target = {
+            "doctorId": doctor_id,
+            "workingHours": payload.workingHours or {"start": "09:00", "end": "18:00"},
+            "lunchBreak": payload.lunchBreak or {"start": "13:00", "end": "14:00"},
+            "slotDuration": payload.slotDuration or 30,
+            "leaves": []
+        }
+        schedules.append(target)
+
+    save_doctor_schedules(schedules)
+    return {"status": "success", "schedule": target}
+
+@app.post("/api/doctors/{doctor_id}/leaves")
+async def add_doctor_leave_endpoint(doctor_id: int, payload: LeaveModel):
+    schedules = load_doctor_schedules()
+    target_idx = None
+    for i, s in enumerate(schedules):
+        if s.get("doctorId") == doctor_id:
+            target_idx = i
+            break
+
+    if target_idx is None:
+        target = {
+            "doctorId": doctor_id,
+            "workingHours": {"start": "09:00", "end": "18:00"},
+            "lunchBreak": {"start": "13:00", "end": "14:00"},
+            "slotDuration": 30,
+            "leaves": []
+        }
+        schedules.append(target)
+        target_idx = len(schedules) - 1
+
+    target = schedules[target_idx]
+    leaves = target.get("leaves", [])
+    found = False
+    for l in leaves:
+        if l.get("date") == payload.date:
+            l["reason"] = payload.reason
+            found = True
+            break
+    if not found:
+        leaves.append({"date": payload.date, "reason": payload.reason})
+
+    target["leaves"] = leaves
+    schedules[target_idx] = target
+    save_doctor_schedules(schedules)
+    return {"status": "success", "message": "Ta'til sanasi qo'shildi", "schedule": target}
+
+@app.delete("/api/doctors/{doctor_id}/leaves/{leave_date}")
+def delete_doctor_leave_endpoint(doctor_id: int, leave_date: str):
+    schedules = load_doctor_schedules()
+    target = None
+    for s in schedules:
+        if s.get("doctorId") == doctor_id:
+            target = s
+            break
+
+    if not target:
+        raise HTTPException(status_code=404, detail="Shifokor jadvali topilmadi")
+
+    orig_count = len(target.get("leaves", []))
+    target["leaves"] = [l for l in target.get("leaves", []) if l.get("date") != leave_date]
+    if len(target["leaves"]) == orig_count:
+        raise HTTPException(status_code=404, detail="Ko'rsatilgan sanadagi ta'til topilmadi")
+
+    save_doctor_schedules(schedules)
+    return {"status": "success", "message": "Ta'til sanasi o'chirildi", "schedule": target}
+
 # 3. PHOTO UPLOAD (Base64 data URL)
 @app.post("/api/upload/doctor-photo")
 async def upload_doctor_photo(request: Request):
@@ -1024,13 +1318,53 @@ def get_available_slots(doctorId: int = Query(...), date: str = Query(...), clin
                 if t:
                     booked_times.add(t)
 
+    # Shifokor jadvali, ta'tillar va tushlik vaqtini tekshirish
+    schedule = get_doctor_schedule(doctorId)
+    is_on_leave = False
+    leave_reason = None
+    for leave in schedule.get("leaves", []):
+        if leave.get("date") == date:
+            is_on_leave = True
+            leave_reason = leave.get("reason", "Ta'til")
+            break
+
+    lunch_break = schedule.get("lunchBreak", {"start": "13:00", "end": "14:00"})
+
+    if is_on_leave:
+        # Ta'til sanasida barcha slotlar bloklanadi (08:00 dan 20:00 gacha)
+        all_day_slots = [
+            f"{h:02d}:{m:02d}"
+            for h in range(8, 20)
+            for m in (0, 15, 30, 45)
+        ]
+        booked_times.update(all_day_slots)
+    else:
+        # Tushlik vaqti (13:00 - 14:00) bloklanadi
+        l_start = lunch_break.get("start", "13:00")
+        l_end = lunch_break.get("end", "14:00")
+        try:
+            start_h = int(l_start.split(":")[0])
+            end_h = int(l_end.split(":")[0])
+            lunch_slots = [
+                f"{h:02d}:{m:02d}"
+                for h in range(start_h, end_h + 1)
+                for m in (0, 15, 30, 45)
+                if l_start <= f"{h:02d}:{m:02d}" < l_end
+            ]
+            booked_times.update(lunch_slots)
+        except Exception:
+            booked_times.update(["13:00", "13:30"])
+
     sorted_slots = sorted(list(booked_times))
     return {
         "doctorId": doctorId,
         "date": date,
         "clinicId": clinicId,
         "bookedTimes": sorted_slots,
-        "busySlots": sorted_slots
+        "busySlots": sorted_slots,
+        "isOnLeave": is_on_leave,
+        "leaveReason": leave_reason,
+        "lunchBreak": lunch_break
     }
 
 @app.get("/api/appointments")
@@ -1081,9 +1415,30 @@ async def create_appointment(appt: AppointmentModel):
         if any(a.get("id") == appt.id for a in db):
             return {"status": "already_exists", "appointment": appt}
 
+        doc_id = appt.doctor.get("id")
+        schedule = get_doctor_schedule(doc_id)
+
+        # 1.1 SHIFOKOR TA'TILINI TEKSHIRISH
+        for leave in schedule.get("leaves", []):
+            if leave.get("date") == appt.date:
+                reason = leave.get("reason", "Ta'tilda")
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Shifokor ushbu sanada ({appt.date}) ta'tilda ({reason}). Iltimos, boshqa sanani tanlang."
+                )
+
+        # 1.2 TUSHLIK TANAFFUSINI TEKSHIRISH
+        lunch = schedule.get("lunchBreak", {"start": "13:00", "end": "14:00"})
+        l_start = lunch.get("start", "13:00")
+        l_end = lunch.get("end", "14:00")
+        if l_start <= appt.time < l_end:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Tanlangan vaqt ({appt.time}) shifokorning tushlik tanaffusiga ({l_start} - {l_end}) to'g'ri keladi. Iltimos, boshqa vaqtni tanlang."
+            )
+
         # 2. DOUBLE-BOOKING CHECK:
         # Same doctor, same date, same time, same clinic, and status != 'cancelled'
-        doc_id = appt.doctor.get("id")
         for existing in db:
             if existing.get("status") == "cancelled":
                 continue

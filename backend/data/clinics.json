@@ -287,5 +287,107 @@
       "lng": 69.2797
     },
     "mapUrl": "https://maps.google.com/?q=41.3111,69.2797"
+  },
+  {
+    "id": "shifonurmed10-main",
+    "tenantId": "shifonurmed10",
+    "name": "Shifo Nur Chilonzor",
+    "isMain": true,
+    "address": "Toshkent shahar, Chilonzor 9-mavze",
+    "landmark": "Markaziy bino",
+    "phone": "+998 71 200-77-77",
+    "managerName": "Dr. Botir Qodirov",
+    "staffPin": "3017",
+    "workingHours": "08:00 - 20:00 (Har kuni)",
+    "location": {
+      "lat": 41.3111,
+      "lng": 69.2797
+    },
+    "mapUrl": "https://maps.google.com/?q=41.3111,69.2797"
+  },
+  {
+    "id": "shifonurmed11-main",
+    "tenantId": "shifonurmed11",
+    "name": "Shifo Nur Chilonzor",
+    "isMain": true,
+    "address": "Toshkent shahar, Chilonzor 9-mavze",
+    "landmark": "Markaziy bino",
+    "phone": "+998 71 200-77-77",
+    "managerName": "Dr. Botir Qodirov",
+    "staffPin": "3018",
+    "workingHours": "08:00 - 20:00 (Har kuni)",
+    "location": {
+      "lat": 41.3111,
+      "lng": 69.2797
+    },
+    "mapUrl": "https://maps.google.com/?q=41.3111,69.2797"
+  },
+  {
+    "id": "shifonurmed12-main",
+    "tenantId": "shifonurmed12",
+    "name": "Shifo Nur Chilonzor",
+    "isMain": true,
+    "address": "Toshkent shahar, Chilonzor 9-mavze",
+    "landmark": "Markaziy bino",
+    "phone": "+998 71 200-77-77",
+    "managerName": "Dr. Botir Qodirov",
+    "staffPin": "3019",
+    "workingHours": "08:00 - 20:00 (Har kuni)",
+    "location": {
+      "lat": 41.3111,
+      "lng": 69.2797
+    },
+    "mapUrl": "https://maps.google.com/?q=41.3111,69.2797"
+  },
+  {
+    "id": "shifonurmed13-main",
+    "tenantId": "shifonurmed13",
+    "name": "Shifo Nur Chilonzor",
+    "isMain": true,
+    "address": "Toshkent shahar, Chilonzor 9-mavze",
+    "landmark": "Markaziy bino",
+    "phone": "+998 71 200-77-77",
+    "managerName": "Dr. Botir Qodirov",
+    "staffPin": "3020",
+    "workingHours": "08:00 - 20:00 (Har kuni)",
+    "location": {
+      "lat": 41.3111,
+      "lng": 69.2797
+    },
+    "mapUrl": "https://maps.google.com/?q=41.3111,69.2797"
+  },
+  {
+    "id": "shifonurmed14-main",
+    "tenantId": "shifonurmed14",
+    "name": "Shifo Nur Chilonzor",
+    "isMain": true,
+    "address": "Toshkent shahar, Chilonzor 9-mavze",
+    "landmark": "Markaziy bino",
+    "phone": "+998 71 200-77-77",
+    "managerName": "Dr. Botir Qodirov",
+    "staffPin": "3021",
+    "workingHours": "08:00 - 20:00 (Har kuni)",
+    "location": {
+      "lat": 41.3111,
+      "lng": 69.2797
+    },
+    "mapUrl": "https://maps.google.com/?q=41.3111,69.2797"
+  },
+  {
+    "id": "shifonurmed15-main",
+    "tenantId": "shifonurmed15",
+    "name": "Shifo Nur Chilonzor",
+    "isMain": true,
+    "address": "Toshkent shahar, Chilonzor 9-mavze",
+    "landmark": "Markaziy bino",
+    "phone": "+998 71 200-77-77",
+    "managerName": "Dr. Botir Qodirov",
+    "staffPin": "3022",
+    "workingHours": "08:00 - 20:00 (Har kuni)",
+    "location": {
+      "lat": 41.3111,
+      "lng": 69.2797
+    },
+    "mapUrl": "https://maps.google.com/?q=41.3111,69.2797"
   }
 ]

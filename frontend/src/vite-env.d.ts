@@ -15,6 +15,7 @@ interface Window {
         notificationOccurred: (type: 'error' | 'success' | 'warning') => void;
         selectionChanged: () => void;
       };
+      initData?: string;
       initDataUnsafe?: {
         user?: {
           id: number;

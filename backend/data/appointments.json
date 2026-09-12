@@ -55,7 +55,9 @@
     "totalAmount": 350000,
     "telegramUserId": 1320855100,
     "telegramUsername": "Dr_eviluz",
-    "reminder24hSent": true
+    "reminder24hSent": true,
+    "reminder2hSent": true,
+    "paymentMethod": "cash"
   },
   {
     "id": "MED-453422",
@@ -109,7 +111,8 @@
     "notes": "",
     "createdAt": "2026-09-08T07:39:29.209Z",
     "telegramUserId": 1320855100,
-    "telegramUsername": "Dr_eviluz"
+    "telegramUsername": "Dr_eviluz",
+    "paymentMethod": "card"
   },
   {
     "id": "MED-503129",
@@ -162,7 +165,8 @@
     "notes": "Xh CNN",
     "createdAt": "2026-09-08T07:25:20.401Z",
     "telegramUserId": 1320855100,
-    "telegramUsername": "Dr_eviluz"
+    "telegramUsername": "Dr_eviluz",
+    "paymentMethod": "online"
   },
   {
     "id": "MED-562324",
@@ -215,7 +219,8 @@
     "notes": "",
     "createdAt": "2026-09-08T07:05:28.183Z",
     "telegramUserId": 1320855100,
-    "telegramUsername": "Dr_eviluz"
+    "telegramUsername": "Dr_eviluz",
+    "paymentMethod": "cash"
   },
   {
     "id": "GM-1001",
@@ -252,7 +257,8 @@
     "status": "confirmed",
     "notes": "Implantatsiya konsultatsiyasi",
     "createdAt": "2026-09-11T12:00:00.000Z",
-    "totalAmount": 4200000
+    "totalAmount": 4200000,
+    "paymentMethod": "card"
   },
   {
     "id": "GM-1002",
@@ -289,6 +295,7 @@
     "status": "completed",
     "notes": "Eylayner boshlang'ich kassetasi",
     "createdAt": "2026-09-11T14:00:00.000Z",
-    "totalAmount": 6000000
+    "totalAmount": 6000000,
+    "paymentMethod": "online"
   }
 ]

@@ -1,0 +1,137 @@
+[
+  {
+    "doctorId": 1,
+    "workingHours": {
+      "start": "09:00",
+      "end": "18:00"
+    },
+    "lunchBreak": {
+      "start": "13:00",
+      "end": "14:00"
+    },
+    "slotDuration": 30,
+    "leaves": [
+      {
+        "date": "2026-09-15",
+        "reason": "Malaka oshirish konferensiyasi"
+      }
+    ]
+  },
+  {
+    "doctorId": 2,
+    "workingHours": {
+      "start": "09:00",
+      "end": "18:00"
+    },
+    "lunchBreak": {
+      "start": "13:00",
+      "end": "14:00"
+    },
+    "slotDuration": 30,
+    "leaves": []
+  },
+  {
+    "doctorId": 3,
+    "workingHours": {
+      "start": "09:00",
+      "end": "18:00"
+    },
+    "lunchBreak": {
+      "start": "13:00",
+      "end": "14:00"
+    },
+    "slotDuration": 30,
+    "leaves": []
+  },
+  {
+    "doctorId": 4,
+    "workingHours": {
+      "start": "09:00",
+      "end": "18:00"
+    },
+    "lunchBreak": {
+      "start": "13:00",
+      "end": "14:00"
+    },
+    "slotDuration": 30,
+    "leaves": []
+  },
+  {
+    "doctorId": 5,
+    "workingHours": {
+      "start": "09:00",
+      "end": "18:00"
+    },
+    "lunchBreak": {
+      "start": "13:00",
+      "end": "14:00"
+    },
+    "slotDuration": 30,
+    "leaves": []
+  },
+  {
+    "doctorId": 6,
+    "workingHours": {
+      "start": "09:00",
+      "end": "18:00"
+    },
+    "lunchBreak": {
+      "start": "13:00",
+      "end": "14:00"
+    },
+    "slotDuration": 30,
+    "leaves": []
+  },
+  {
+    "doctorId": 7,
+    "workingHours": {
+      "start": "09:00",
+      "end": "18:00"
+    },
+    "lunchBreak": {
+      "start": "13:00",
+      "end": "14:00"
+    },
+    "slotDuration": 30,
+    "leaves": []
+  },
+  {
+    "doctorId": 101,
+    "workingHours": {
+      "start": "09:00",
+      "end": "18:00"
+    },
+    "lunchBreak": {
+      "start": "13:00",
+      "end": "14:00"
+    },
+    "slotDuration": 30,
+    "leaves": []
+  },
+  {
+    "doctorId": 102,
+    "workingHours": {
+      "start": "09:00",
+      "end": "18:00"
+    },
+    "lunchBreak": {
+      "start": "13:00",
+      "end": "14:00"
+    },
+    "slotDuration": 30,
+    "leaves": []
+  },
+  {
+    "doctorId": 103,
+    "workingHours": {
+      "start": "09:00",
+      "end": "18:00"
+    },
+    "lunchBreak": {
+      "start": "13:00",
+      "end": "14:00"
+    },
+    "slotDuration": 30,
+    "leaves": []
+  }
+]
