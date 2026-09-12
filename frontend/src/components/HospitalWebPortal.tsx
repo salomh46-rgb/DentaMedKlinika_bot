@@ -9,17 +9,28 @@ import {
   StaffSession,
   ToothData,
   Prescription,
-  PrescriptionMedicine
+  PrescriptionMedicine,
+  Tenant,
+  Clinic
 } from '../types';
-import { CLINICS, DOCTORS, SERVICES, INITIAL_RECEPTION_APPOINTMENTS, INITIAL_TEETH } from '../data/mockData';
+import { CLINICS, DOCTORS, SERVICES, INITIAL_RECEPTION_APPOINTMENTS, INITIAL_TEETH, TENANTS } from '../data/mockData';
 import {
   updateAppointmentStatus,
   sendPrescription,
   fetchAppointments,
   fetchDoctors,
-  fetchServices
+  fetchServices,
+  loginStaff,
+  registerTenant,
+  addNewBranchLocally,
+  getStoredTenants,
+  getStoredClinics
 } from '../services/api';
 import {
+  Key,
+  Copy,
+  ExternalLink,
+  Lock,
   Building2,
   Clock,
   Printer,
@@ -97,8 +108,226 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
   // Navigation tabs
   const [activeTab, setActiveTab] = useState<'frontdesk' | 'doctor_suite' | 'ceo_finance' | 'sms_settings'>('frontdesk');
 
+  // Dynamic Tenants & Clinics lists
+  const [tenantsList, setTenantsList] = useState<Tenant[]>(() => getStoredTenants());
+  const [clinicsList, setClinicsList] = useState<Clinic[]>(() => getStoredClinics());
+
+  // Active Authenticated Staff Session
+  const [activeSession, setActiveSession] = useState<StaffSession | null>(() => {
+    if (staffSession) return staffSession;
+    try {
+      const saved = localStorage.getItem('dentamed_portal_staff_session');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return null;
+  });
+
+  // Current active Tenant (Clinic Brand)
+  const currentTenant = useMemo(() => {
+    if (!activeSession || activeSession.tenantId === 'all') {
+      return tenantsList[0] || TENANTS[0];
+    }
+    return tenantsList.find(t => t.id === activeSession.tenantId) || tenantsList[0] || TENANTS[0];
+  }, [activeSession, tenantsList]);
+
+  // Allowed branches for currently active session
+  const visibleBranches = useMemo(() => {
+    if (!activeSession) {
+      // Demo / Guest mode: show all branches
+      return clinicsList;
+    }
+    if (activeSession.role === 'super_admin' || activeSession.tenantId === 'all') {
+      return clinicsList;
+    }
+    if (activeSession.role === 'clinic_director') {
+      return clinicsList.filter(c => c.tenantId === activeSession.tenantId);
+    }
+    // Receptionist: strictly only allowed branch
+    return clinicsList.filter(c => activeSession.allowedClinicIds.includes(c.id));
+  }, [clinicsList, activeSession]);
+
   // Multi-Branch Selection
   const [selectedBranchId, setSelectedBranchId] = useState<string>('all');
+
+  // Ensure selectedBranchId stays valid when session changes
+  useEffect(() => {
+    if (selectedBranchId !== 'all' && !visibleBranches.some(b => b.id === selectedBranchId)) {
+      setSelectedBranchId(visibleBranches[0]?.id || 'all');
+    }
+  }, [visibleBranches, selectedBranchId]);
+
+  // Feedback Toast State
+  const [portalToast, setPortalToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
+  const showToast = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
+    setPortalToast({ message, type });
+    setTimeout(() => setPortalToast(null), 4000);
+  };
+
+  // 1. PIN Login Modal States
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [loginPin, setLoginPin] = useState('');
+  const [loginError, setLoginError] = useState<string | null>(null);
+
+  const handleStaffLogin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!loginPin.trim()) return;
+    const res = await loginStaff(loginPin);
+    if (res.ok && res.session) {
+      setActiveSession(res.session);
+      localStorage.setItem('dentamed_portal_staff_session', JSON.stringify(res.session));
+      setIsLoginModalOpen(false);
+      setLoginPin('');
+      setLoginError(null);
+      if (res.session.role === 'reception' && res.session.clinicId) {
+        setSelectedBranchId(res.session.clinicId);
+      } else {
+        setSelectedBranchId('all');
+      }
+      showToast(lang === 'uz' ? `Xush kelibsiz! ${res.session.titleUz} portali faol` : `Добро пожаловать! ${res.session.titleRu}`);
+    } else {
+      setLoginError(res.error || (lang === 'uz' ? "Noto'g'ri PIN-kod! (Rahbar: 7777 / 8888, Nukus: 1001)" : "Неверный PIN-код!"));
+    }
+  };
+
+  const handleStaffLogout = () => {
+    setActiveSession(null);
+    localStorage.removeItem('dentamed_portal_staff_session');
+    setSelectedBranchId('all');
+    showToast(lang === 'uz' ? "Tizimdan chiqildi. Demo rejimga qaytildi." : "Вы вышли из системы.", "info");
+  };
+
+  // 2. Sign Up Wizard States (New Clinic Onboarding)
+  const [isSignUpModalOpen, setIsSignUpModalOpen] = useState(false);
+  const [signUpStep, setSignUpStep] = useState<1 | 2 | 3>(1);
+  const [signUpData, setSignUpData] = useState({
+    clinicName: '',
+    ownerName: '',
+    phone: '+998 ',
+    email: '',
+    firstBranchName: '',
+    firstBranchAddress: ''
+  });
+  const [signUpResult, setSignUpResult] = useState<{
+    tenantId: string;
+    tenantName: string;
+    ownerPin: string;
+    staffPin: string;
+    firstBranchId: string;
+  } | null>(null);
+  const [signUpLoading, setSignUpLoading] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const handleCopy = (text: string, keyName: string) => {
+    navigator.clipboard?.writeText(text);
+    setCopiedKey(keyName);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const handleSignUpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (signUpStep === 1) {
+      if (!signUpData.clinicName.trim() || !signUpData.ownerName.trim()) return;
+      if (!signUpData.firstBranchName) {
+        setSignUpData(prev => ({
+          ...prev,
+          firstBranchName: `${prev.clinicName} Bosh Filial`
+        }));
+      }
+      setSignUpStep(2);
+      return;
+    }
+
+    if (signUpStep === 2) {
+      setSignUpLoading(true);
+      try {
+        const res = await registerTenant({
+          name: signUpData.clinicName,
+          ownerName: signUpData.ownerName,
+          phone: signUpData.phone,
+          email: signUpData.email,
+          firstBranchName: signUpData.firstBranchName,
+          firstBranchAddress: signUpData.firstBranchAddress
+        });
+
+        if (res.ok && res.tenant && res.branch && res.ownerPin && res.staffPin) {
+          setSignUpResult({
+            tenantId: res.tenant.id,
+            tenantName: res.tenant.name,
+            ownerPin: res.ownerPin,
+            staffPin: res.staffPin,
+            firstBranchId: res.branch.id
+          });
+          setTenantsList(getStoredTenants());
+          setClinicsList(getStoredClinics());
+          setSignUpStep(3);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setSignUpLoading(false);
+      }
+    }
+  };
+
+  const handleLoginAsNewTenant = () => {
+    if (!signUpResult) return;
+    setIsSignUpModalOpen(false);
+    loginStaff(signUpResult.ownerPin).then(res => {
+      if (res.ok && res.session) {
+        setActiveSession(res.session);
+        localStorage.setItem('dentamed_portal_staff_session', JSON.stringify(res.session));
+        setSelectedBranchId(signUpResult.firstBranchId);
+        showToast(lang === 'uz' ? `Tabriklaymiz! ${signUpResult.tenantName} boshqaruv paneli ishga tushdi!` : `Поздравляем! Панель управления клиники активна!`);
+      }
+    });
+  };
+
+  // 3. Add Branch Modal State
+  const [isAddBranchModalOpen, setIsAddBranchModalOpen] = useState(false);
+  const [newBranchData, setNewBranchData] = useState({
+    name: '',
+    address: '',
+    managerName: '',
+    phone: '+998 ',
+    staffPin: ''
+  });
+
+  const handleAddBranchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBranchData.name.trim()) return;
+    const branchSlug = `${currentTenant.id}-${Date.now().toString().slice(-4)}`;
+    const generatedPin = newBranchData.staffPin.trim() || Math.floor(3000 + Math.random() * 1000).toString();
+    const branchObj: Clinic = {
+      id: branchSlug,
+      tenantId: currentTenant.id,
+      name: newBranchData.name,
+      branchName: {
+        uz: newBranchData.name,
+        ru: newBranchData.name
+      },
+      city: { uz: 'Toshkent', ru: 'Ташкент' },
+      address: {
+        uz: newBranchData.address || "Toshkent shahar",
+        ru: newBranchData.address || 'г. Ташкент'
+      },
+      landmark: { uz: "Markaz", ru: 'Центр' },
+      phone: newBranchData.phone,
+      workingHours: {
+        uz: '08:00 - 20:00 (Har kuni)',
+        ru: '08:00 - 20:00 (Без выходных)'
+      },
+      badge: 'Filial',
+      staffPin: generatedPin,
+      managerName: newBranchData.managerName
+    };
+    addNewBranchLocally(branchObj);
+    const updatedClinics = getStoredClinics();
+    setClinicsList(updatedClinics);
+    setIsAddBranchModalOpen(false);
+    setNewBranchData({ name: '', address: '', managerName: '', phone: '+998 ', staffPin: '' });
+    setSelectedBranchId(branchSlug);
+    showToast(lang === 'uz' ? `Yangi filial "${newBranchData.name}" muvaffaqiyatli qo'shildi! PIN: ${generatedPin}` : `Филиал успешно добавлен! PIN: ${generatedPin}`);
+  };
 
   // Live Clock (Asia/Tashkent)
   const [currentDateTime, setCurrentDateTime] = useState<string>('');
@@ -163,9 +392,14 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
 
   // Filtered appointments by branch
   const branchFilteredAppointments = useMemo(() => {
-    if (selectedBranchId === 'all') return appointments;
-    return appointments.filter(a => (a.clinicId || 'nukus') === selectedBranchId);
-  }, [appointments, selectedBranchId]);
+    const allowedIds = visibleBranches.map(b => b.id);
+    const pool = activeSession?.role === 'super_admin' || !activeSession
+      ? appointments
+      : appointments.filter(a => allowedIds.includes(a.clinicId || 'nukus'));
+
+    if (selectedBranchId === 'all') return pool;
+    return pool.filter(a => (a.clinicId || 'nukus') === selectedBranchId);
+  }, [appointments, selectedBranchId, visibleBranches, activeSession]);
 
   // ==========================================
   // TAB 1: FRONT-DESK (RECEPTION) STATES
@@ -467,19 +701,19 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
           {/* Brand Emblem & Name */}
           <div className="flex items-center gap-3.5">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#C5A880] to-[#8C7350] text-[#112E24] font-serif font-black text-xl flex items-center justify-center shadow-md border border-[#FAF8F5]/30">
-              D
+              {currentTenant.name.charAt(0) || 'D'}
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="font-serif text-lg font-bold tracking-tight text-[#FAF8F5]">
-                  DentaMed Atelier
+                  {currentTenant.name}
                 </h1>
                 <span className="text-[10px] uppercase font-bold tracking-widest bg-[#C5A880]/20 text-[#D6BF9F] px-2 py-0.5 rounded border border-[#C5A880]/30">
-                  Swiss Luxury Hospital Portal
+                  {currentTenant.badge || 'Swiss Luxury Hospital Portal'}
                 </span>
               </div>
               <p className="text-[11px] text-[#A2B5AB] flex items-center gap-1.5">
-                <span>Enterprise Medical CRM & Kassa</span>
+                <span>{currentTenant.tagline[lang] || 'Enterprise Medical CRM & Kassa'}</span>
                 <span>•</span>
                 <span className="text-[#C5A880] font-mono">v4.8 High-Precision</span>
               </p>
@@ -487,7 +721,7 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
           </div>
 
           {/* Center: Live Clock & Branch Switcher */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             {/* Branch Selector */}
             <div className="flex items-center gap-2 bg-[#183F32] dark:bg-[#0E241D] px-3.5 py-1.5 rounded-xl border border-[#C5A880]/30 shadow-inner">
               <Building2 className="w-4 h-4 text-[#C5A880]" />
@@ -497,12 +731,14 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
               <select
                 value={selectedBranchId}
                 onChange={e => setSelectedBranchId(e.target.value)}
-                className="bg-transparent text-xs font-bold text-[#FAF8F5] focus:outline-none cursor-pointer"
+                className="bg-transparent text-xs font-bold text-[#FAF8F5] focus:outline-none cursor-pointer max-w-[200px]"
               >
-                <option value="all" className="bg-[#112E24] text-[#FAF8F5]">
-                  🌐 {lang === 'uz' ? 'Barcha 7 ta Filial (Umumiy)' : 'Все 7 Филиалов'}
-                </option>
-                {CLINICS.map(clinic => (
+                {(!activeSession || activeSession.role === 'super_admin' || activeSession.isDirector) && (
+                  <option value="all" className="bg-[#112E24] text-[#FAF8F5]">
+                    🌐 {lang === 'uz' ? `Barcha ${visibleBranches.length} ta Filial (Umumiy)` : `Все ${visibleBranches.length} Филиалов`}
+                  </option>
+                )}
+                {visibleBranches.map(clinic => (
                   <option key={clinic.id} value={clinic.id} className="bg-[#112E24] text-[#FAF8F5]">
                     📍 {clinic.branchName[lang] || clinic.name}
                   </option>
@@ -529,15 +765,57 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
               <span className="flex items-center gap-1 text-sky-300">
                 <Printer className="w-3 h-3 text-sky-400" /> Kassa 58/80mm
               </span>
-              <span>•</span>
-              <span className="flex items-center gap-1 text-amber-300">
-                <MessageSquare className="w-3 h-3 text-amber-400" /> Eskiz: 2.4k SMS
-              </span>
             </div>
           </div>
 
-          {/* Right Action Tools: Refresh, Theme, Exit */}
+          {/* Right Action Tools: Auth Actions, Refresh, Theme, Exit */}
           <div className="flex items-center gap-2">
+            {/* Authenticated User or Sign Up / Login buttons */}
+            {activeSession ? (
+              <div className="flex items-center gap-2 bg-[#183F32] px-3 py-1.5 rounded-xl border border-[#C5A880]/40 shadow-sm">
+                <div className="text-right">
+                  <div className="text-xs font-bold text-[#FAF8F5] leading-tight flex items-center gap-1">
+                    <span>{activeSession.staffName}</span>
+                  </div>
+                  <div className="text-[10px] text-[#C5A880] leading-tight">
+                    {activeSession.titleUz}
+                  </div>
+                </div>
+                <button
+                  onClick={handleStaffLogout}
+                  className="p-1 rounded-lg hover:bg-rose-900/50 text-rose-300 transition"
+                  title="Chiqish"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                {/* 1. Login Button */}
+                <button
+                  onClick={() => setIsLoginModalOpen(true)}
+                  className="flex items-center gap-1.5 bg-[#183F32] hover:bg-[#225745] text-[#FAF8F5] border border-[#C5A880]/50 px-3.5 py-1.5 rounded-xl text-xs font-bold transition shadow-sm hover:scale-95"
+                  title="PIN-kod orqali kirish"
+                >
+                  <Lock className="w-3.5 h-3.5 text-[#C5A880]" />
+                  <span>{lang === 'uz' ? 'Kirish (PIN)' : 'Войти'}</span>
+                </button>
+
+                {/* 2. Sign Up (New Clinic) Button */}
+                <button
+                  onClick={() => {
+                    setSignUpStep(1);
+                    setIsSignUpModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 bg-gradient-to-r from-[#C5A880] to-[#A88B63] hover:from-[#D4B992] hover:to-[#BFA075] text-[#112E24] px-3.5 py-1.5 rounded-xl text-xs font-black transition shadow-md hover:scale-95 animate-pulse"
+                  title="Yangi klinika ulash"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>{lang === 'uz' ? '+ Yangi Klinika Ulash' : '+ Подключить Клинику'}</span>
+                </button>
+              </div>
+            )}
+
             <button
               onClick={refreshAllData}
               disabled={isRefreshing}
@@ -560,14 +838,22 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
             {/* Exit to Patient View */}
             <button
               onClick={onExitPortal}
-              className="flex items-center gap-1.5 bg-rose-950/70 hover:bg-rose-900 text-rose-200 border border-rose-700/50 px-3.5 py-1.5 rounded-xl text-xs font-bold transition shadow-sm"
+              className="flex items-center gap-1.5 bg-rose-950/70 hover:bg-rose-900 text-rose-200 border border-rose-700/50 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-sm"
               title="Bemorlar ilovasiga qaytish"
             >
               <LogOut className="w-3.5 h-3.5" />
-              <span>{lang === 'uz' ? 'Bemor Rejimi' : 'Режим Пациента'}</span>
+              <span className="hidden sm:inline">{lang === 'uz' ? 'Bemor Rejimi' : 'Режим Пациента'}</span>
             </button>
           </div>
         </div>
+
+        {/* Global Toast Alert */}
+        {portalToast && (
+          <div className="bg-[#C5A880] text-[#112E24] px-4 py-2 text-xs font-bold text-center flex items-center justify-center gap-2 shadow-md animate-fade-in">
+            <CheckCircle2 className="w-4 h-4" />
+            <span>{portalToast.message}</span>
+          </div>
+        )}
 
         {/* 4 Main Portal Tabs (Swiss Navigation Ribbon) */}
         <div className="px-6 flex gap-2 border-t border-[#183F32] overflow-x-auto no-scrollbar bg-[#0E271F] py-2">
@@ -1316,6 +1602,72 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
         {/* ========================================================================= */}
         {activeTab === 'ceo_finance' && (
           <div className="space-y-6">
+            {/* Multi-Branch Management Banner for Clinic Owner */}
+            <div className="bg-white dark:bg-[#0E231B] p-6 rounded-3xl border border-[#E8E2D8] dark:border-[#183F32] shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#E8E2D8] dark:border-[#183F32]">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] flex items-center justify-center font-bold shadow">
+                    <Building2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-serif font-bold text-base text-[#112E24] dark:text-[#FAF8F5]">
+                      🏥 {currentTenant.name} Filiallari va Retsepshn Kalitlari
+                    </h3>
+                    <p className="text-xs text-[#627068] dark:text-[#9FB1A7]">
+                      Barcha filiallar xodimlarining PIN-kodlari va boshqaruv markazi
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setIsAddBranchModalOpen(true)}
+                  className="flex items-center gap-2 bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] px-4 py-2.5 rounded-xl text-xs font-bold transition shadow hover:scale-95 self-start sm:self-auto"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{lang === 'uz' ? '+ Yangi Filial Qo\'shish' : '+ Добавить Филиал'}</span>
+                </button>
+              </div>
+
+              {/* Branches Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {visibleBranches.map(branch => (
+                  <div
+                    key={branch.id}
+                    className="p-4 rounded-2xl border border-[#E8E2D8] dark:border-[#183F32] bg-[#FAF8F5] dark:bg-[#07130F] hover:border-[#C5A880] transition space-y-2 relative group"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-bold text-xs text-[#112E24] dark:text-[#FAF8F5] flex items-center gap-1.5">
+                          <span>📍 {branch.branchName[lang] || branch.name}</span>
+                          {branch.isMain && (
+                            <span className="text-[9px] bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold px-1.5 py-0.5 rounded">
+                              Bosh filial
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-gray-500 mt-0.5 truncate max-w-[220px]">
+                          {branch.address[lang] || branch.address.uz}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-[#E8E2D8]/60 dark:border-[#183F32]/60 flex items-center justify-between text-xs">
+                      <div className="text-gray-500 text-[11px]">
+                        Admin: <b className="text-[#112E24] dark:text-[#FAF8F5]">{branch.managerName || 'Retsepshn'}</b>
+                      </div>
+                      <div className="flex items-center gap-1.5 bg-[#112E24]/5 dark:bg-[#C5A880]/10 px-2 py-0.5 rounded border border-[#C5A880]/20">
+                        <Key className="w-3 h-3 text-[#C5A880]" />
+                        <span className="text-[10px] text-gray-500">PIN:</span>
+                        <span className="font-mono font-bold text-[#112E24] dark:text-[#FAF8F5]">
+                          {branch.staffPin || '1001'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* Financial Revenue Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-white dark:bg-[#0E231B] p-5 rounded-3xl border border-[#E8E2D8] dark:border-[#183F32] shadow-sm">
@@ -2188,6 +2540,505 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
                 className="flex-1 py-2.5 rounded-xl bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] text-xs font-bold transition shadow-md hover:scale-95"
               >
                 Saqlash
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 6. PIN AUTHENTICATION / LOGIN MODAL (RBAC)                                 */}
+      {/* ========================================================================= */}
+      {isLoginModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#0E231B] rounded-3xl p-6 sm:p-8 max-w-md w-full border border-[#C5A880]/50 shadow-2xl space-y-5 animate-scale-up">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] flex items-center justify-center">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-serif font-bold text-base text-[#112E24] dark:text-[#FAF8F5]">
+                    {lang === 'uz' ? 'CRM Tizimiga Kirish' : 'Вход в CRM'}
+                  </h3>
+                  <p className="text-[11px] text-[#627068] dark:text-[#9FB1A7]">
+                    {lang === 'uz' ? 'Klinika Rahbari yoki Filial PIN-kodi' : 'PIN-код руководителя или филиала'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLoginModalOpen(false);
+                  setLoginError(null);
+                }}
+                className="p-1.5 rounded-xl text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Demo PIN hints */}
+            <div className="bg-[#FAF8F5] dark:bg-[#07130F] p-3 rounded-2xl border border-[#E8E2D8] dark:border-[#183F32] space-y-1.5 text-xs">
+              <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                {lang === 'uz' ? 'Tezkor Sinov PIN-kodlari (1-klikda tanlash):' : 'Быстрые тестовые PIN-коды:'}
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setLoginPin('7777')}
+                  className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-[#0E231B] border border-amber-500/30 hover:border-amber-500 text-left transition"
+                >
+                  <span className="font-semibold text-amber-700 dark:text-amber-300 truncate">👑 DentaMed CEO</span>
+                  <span className="font-mono font-bold ml-1 bg-amber-500/10 px-1.5 py-0.5 rounded">7777</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLoginPin('8888')}
+                  className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-[#0E231B] border border-blue-500/30 hover:border-blue-500 text-left transition"
+                >
+                  <span className="font-semibold text-blue-600 dark:text-blue-400 truncate">👑 GrandMed CEO</span>
+                  <span className="font-mono font-bold ml-1 bg-blue-500/10 px-1.5 py-0.5 rounded">8888</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLoginPin('1001')}
+                  className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-[#0E231B] border border-emerald-500/30 hover:border-emerald-500 text-left transition"
+                >
+                  <span className="font-medium text-emerald-700 dark:text-emerald-300 truncate">📍 Nukus Retsepshn</span>
+                  <span className="font-mono font-bold ml-1 bg-emerald-500/10 px-1.5 py-0.5 rounded">1001</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLoginPin('2001')}
+                  className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-[#0E231B] border border-purple-500/30 hover:border-purple-500 text-left transition"
+                >
+                  <span className="font-medium text-purple-600 dark:text-purple-400 truncate">📍 GrandMed Retsepshn</span>
+                  <span className="font-mono font-bold ml-1 bg-purple-500/10 px-1.5 py-0.5 rounded">2001</span>
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleStaffLogin} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-gray-600 dark:text-gray-300 block mb-1.5">
+                  {lang === 'uz' ? '4 xonali PIN-kod:' : '4-значный PIN-код:'}
+                </label>
+                <input
+                  type="password"
+                  maxLength={6}
+                  autoFocus
+                  placeholder="PIN: 7777 / 8888 / 1001"
+                  value={loginPin}
+                  onChange={e => {
+                    setLoginPin(e.target.value);
+                    setLoginError(null);
+                  }}
+                  className="w-full text-center tracking-[0.3em] font-mono text-2xl py-3 rounded-2xl border-2 border-[#C5A880] bg-white dark:bg-[#07130F] text-[#112E24] dark:text-[#FAF8F5] focus:outline-none focus:ring-2 focus:ring-[#C5A880]"
+                />
+                {loginError && (
+                  <div className="text-rose-500 text-xs text-center mt-2 font-semibold">
+                    {loginError}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsLoginModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+                >
+                  {lang === 'uz' ? 'Bekor qilish' : 'Отмена'}
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] text-xs font-bold transition shadow-md hover:scale-95 flex items-center justify-center gap-1.5"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>{lang === 'uz' ? 'Tizimga Kirish' : 'Войти'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 7. SIGN UP ONBOARDING WIZARD MODAL (YANGI KLINIKA ULASH / 3 BOSQICH)        */}
+      {/* ========================================================================= */}
+      {isSignUpModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#0E231B] rounded-3xl p-6 sm:p-8 max-w-lg w-full border-2 border-[#C5A880] shadow-2xl space-y-5 animate-scale-up">
+            {/* Header & Step Tracker */}
+            <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-[#C5A880]" />
+                  <h3 className="font-serif font-bold text-lg text-[#112E24] dark:text-[#FAF8F5]">
+                    {signUpStep === 3
+                      ? (lang === 'uz' ? '🎉 Tabriklaymiz! Tizim Tayyor!' : '🎉 Поздравляем!')
+                      : (lang === 'uz' ? 'Yangi Klinika Ulash (14 Kun Bepul)' : 'Подключение Новой Клиники')}
+                  </h3>
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {signUpStep === 1 && (lang === 'uz' ? '1-Qadam: Klinika brendi va Rahbar ma\'lumotlari' : 'Шаг 1: Клиника и Руководитель')}
+                  {signUpStep === 2 && (lang === 'uz' ? '2-Qadam: Birlamchi filial manzili va ish vaqti' : 'Шаг 2: Первый филиал')}
+                  {signUpStep === 3 && (lang === 'uz' ? '3-Qadam: Barcha PIN-kodlar va Telegram ulanish kalitlari' : 'Шаг 3: Ваши ключи доступа')}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsSignUpModalOpen(false)}
+                className="p-1.5 rounded-xl text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Stepper Dots */}
+            <div className="flex items-center gap-2">
+              <div className={`flex-1 h-1.5 rounded-full transition-all ${signUpStep >= 1 ? 'bg-[#C5A880]' : 'bg-gray-200 dark:bg-gray-700'}`} />
+              <div className={`flex-1 h-1.5 rounded-full transition-all ${signUpStep >= 2 ? 'bg-[#C5A880]' : 'bg-gray-200 dark:bg-gray-700'}`} />
+              <div className={`flex-1 h-1.5 rounded-full transition-all ${signUpStep === 3 ? 'bg-emerald-500' : 'bg-gray-200 dark:bg-gray-700'}`} />
+            </div>
+
+            {/* STEP 1 & 2 FORM */}
+            {signUpStep !== 3 ? (
+              <form onSubmit={handleSignUpSubmit} className="space-y-4">
+                {signUpStep === 1 && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-bold text-gray-700 dark:text-gray-300 block mb-1">
+                        Klinika yoki Tibbiyot Markazi Nomi: *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={signUpData.clinicName}
+                        onChange={e => setSignUpData({ ...signUpData, clinicName: e.target.value })}
+                        placeholder="Masalan: Shifo Nur Med, Perfect Smile..."
+                        className="w-full p-3 rounded-xl border border-[#E8E2D8] dark:border-[#183F32] bg-[#FAF8F5] dark:bg-[#07130F] text-xs font-semibold focus:outline-none focus:border-[#C5A880]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-gray-700 dark:text-gray-300 block mb-1">
+                        Bosh Shifokor / Klinika Rahbari F.I.Sh: *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={signUpData.ownerName}
+                        onChange={e => setSignUpData({ ...signUpData, ownerName: e.target.value })}
+                        placeholder="Dr. Nodir Zokirov"
+                        className="w-full p-3 rounded-xl border border-[#E8E2D8] dark:border-[#183F32] bg-[#FAF8F5] dark:bg-[#07130F] text-xs font-semibold focus:outline-none focus:border-[#C5A880]"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-bold text-gray-700 dark:text-gray-300 block mb-1">
+                          Rahbar Telefon Raqami: *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={signUpData.phone}
+                          onChange={e => setSignUpData({ ...signUpData, phone: e.target.value })}
+                          className="w-full p-3 rounded-xl border border-[#E8E2D8] dark:border-[#183F32] bg-[#FAF8F5] dark:bg-[#07130F] font-mono text-xs font-bold focus:outline-none focus:border-[#C5A880]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-gray-700 dark:text-gray-300 block mb-1">
+                          Email (Ixtiyoriy):
+                        </label>
+                        <input
+                          type="email"
+                          value={signUpData.email}
+                          onChange={e => setSignUpData({ ...signUpData, email: e.target.value })}
+                          placeholder="info@shifonur.uz"
+                          className="w-full p-3 rounded-xl border border-[#E8E2D8] dark:border-[#183F32] bg-[#FAF8F5] dark:bg-[#07130F] text-xs focus:outline-none focus:border-[#C5A880]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {signUpStep === 2 && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-bold text-gray-700 dark:text-gray-300 block mb-1">
+                        1-Birlamchi Filial Nomi:
+                      </label>
+                      <input
+                        type="text"
+                        value={signUpData.firstBranchName}
+                        onChange={e => setSignUpData({ ...signUpData, firstBranchName: e.target.value })}
+                        placeholder={`${signUpData.clinicName || 'Klinika'} Bosh Filiali`}
+                        className="w-full p-3 rounded-xl border border-[#E8E2D8] dark:border-[#183F32] bg-[#FAF8F5] dark:bg-[#07130F] text-xs font-semibold focus:outline-none focus:border-[#C5A880]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-gray-700 dark:text-gray-300 block mb-1">
+                        Filial Shahri va Manzili:
+                      </label>
+                      <input
+                        type="text"
+                        value={signUpData.firstBranchAddress}
+                        onChange={e => setSignUpData({ ...signUpData, firstBranchAddress: e.target.value })}
+                        placeholder="Toshkent sh., Chilonzor 9-mavze, 12-uy (Metro yaqinida)"
+                        className="w-full p-3 rounded-xl border border-[#E8E2D8] dark:border-[#183F32] bg-[#FAF8F5] dark:bg-[#07130F] text-xs font-semibold focus:outline-none focus:border-[#C5A880]"
+                      />
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300/40 text-xs text-amber-900 dark:text-amber-200 flex items-center gap-2">
+                      <Shield className="w-5 h-5 text-amber-600 shrink-0" />
+                      <span>
+                        Tizim sizga <b>Rahbar Super PIN</b> va <b>Filial Retsepshn PIN</b> kodlarini avtomatik generatsiya qilib beradi!
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-2.5 pt-2">
+                  {signUpStep === 2 && (
+                    <button
+                      type="button"
+                      onClick={() => setSignUpStep(1)}
+                      className="py-2.5 px-4 rounded-xl border border-gray-300 dark:border-gray-700 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 transition"
+                    >
+                      Orqaga
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={signUpLoading}
+                    className="flex-1 py-3 rounded-xl bg-gradient-to-r from-[#112E24] to-[#1C4D3D] dark:from-[#C5A880] dark:to-[#A88B63] text-[#FAF8F5] dark:text-[#07130F] text-xs font-black transition shadow-lg hover:scale-95 flex items-center justify-center gap-2"
+                  >
+                    {signUpLoading ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : signUpStep === 1 ? (
+                      <>
+                        <span>Keyingi Bosqich</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4" />
+                        <span>Klinikani Ishga Tushirish (14 Kun Bepul)</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              /* STEP 3: CELEBRATION & GENERATED ACCESS KEYS */
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/40 text-emerald-800 dark:text-emerald-200 text-xs">
+                  <div className="font-bold flex items-center gap-1.5 text-sm mb-1">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    <span>Tabriklaymiz! {signUpResult?.tenantName} tizimi faollashtirildi!</span>
+                  </div>
+                  <p>
+                    Quyidagi kalitlar va bot havolasini saqlab oling. Ushbu PIN-kodlar orqali har doim CRM ga kirasiz:
+                  </p>
+                </div>
+
+                <div className="space-y-2.5">
+                  {/* Key 1: Owner PIN */}
+                  <div className="p-3.5 rounded-2xl border-2 border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/20 flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] uppercase font-bold text-amber-700 dark:text-amber-300">
+                        👑 Sizning Rahbar Super PIN-kodingiz:
+                      </div>
+                      <div className="font-mono text-xl font-black text-[#112E24] dark:text-[#FAF8F5] tracking-widest mt-0.5">
+                        {signUpResult?.ownerPin}
+                      </div>
+                      <div className="text-[10.5px] text-gray-500">
+                        Moliya, kassa va filiallar boshqaruvi uchun
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(signUpResult?.ownerPin || '', 'ownerPin')}
+                      className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 text-xs font-bold transition flex items-center gap-1"
+                    >
+                      {copiedKey === 'ownerPin' ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                      <span>{copiedKey === 'ownerPin' ? 'Nusxalandi' : 'Nusxa'}</span>
+                    </button>
+                  </div>
+
+                  {/* Key 2: Branch Staff PIN */}
+                  <div className="p-3.5 rounded-2xl border border-emerald-500/40 bg-emerald-50/40 dark:bg-emerald-950/20 flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-300">
+                        📍 1-Filial Retsepshn PIN-kodi:
+                      </div>
+                      <div className="font-mono text-xl font-black text-[#112E24] dark:text-[#FAF8F5] tracking-widest mt-0.5">
+                        {signUpResult?.staffPin}
+                      </div>
+                      <div className="text-[10.5px] text-gray-500">
+                        Administrator bemorlarni kutib olishi va kassa cheki uchun
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(signUpResult?.staffPin || '', 'staffPin')}
+                      className="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-xs font-bold transition flex items-center gap-1"
+                    >
+                      {copiedKey === 'staffPin' ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                      <span>{copiedKey === 'staffPin' ? 'Nusxalandi' : 'Nusxa'}</span>
+                    </button>
+                  </div>
+
+                  {/* Key 3: Telegram Bot Link */}
+                  <div className="p-3 rounded-2xl border border-blue-500/40 bg-blue-50/40 dark:bg-blue-950/20 flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] uppercase font-bold text-blue-700 dark:text-blue-300">
+                        🤖 Bemorlar uchun Telegram Bot:
+                      </div>
+                      <div className="font-mono text-xs font-bold text-blue-800 dark:text-blue-200 mt-0.5">
+                        @DentaMedKlinika_bot
+                      </div>
+                    </div>
+                    <a
+                      href="https://t.me/DentaMedKlinika_bot"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-700 dark:text-blue-300 text-xs font-bold transition flex items-center gap-1"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Ochish</span>
+                    </a>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleLoginAsNewTenant}
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-bold text-xs shadow-lg hover:scale-95 transition flex items-center justify-center gap-2"
+                >
+                  <Crown className="w-4 h-4 text-amber-300" />
+                  <span>CRM Tizimiga Rahbar Sifatida Kirish 🚀</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 8. ADD BRANCH MODAL (YANGI FILIAL QO'SHISH)                                */}
+      {/* ========================================================================= */}
+      {isAddBranchModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <form
+            onSubmit={handleAddBranchSubmit}
+            className="bg-white dark:bg-[#0E231B] rounded-3xl p-6 sm:p-7 max-w-md w-full border border-[#C5A880]/50 shadow-2xl space-y-4 animate-scale-up"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-[#C5A880]" />
+                <h3 className="font-serif font-bold text-base text-[#112E24] dark:text-[#FAF8F5]">
+                  {lang === 'uz' ? 'Yangi Filial Qo\'shish' : 'Добавить Филиал'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddBranchModalOpen(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-gray-700 dark:text-gray-300 block mb-1">
+                  Filial Nomi: *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newBranchData.name}
+                  onChange={e => setNewBranchData({ ...newBranchData, name: e.target.value })}
+                  placeholder="Masalan: Samarqand Filiali, Chilonzor 2..."
+                  className="w-full p-2.5 rounded-xl border border-[#E8E2D8] dark:border-[#183F32] bg-[#FAF8F5] dark:bg-[#07130F] text-xs font-semibold focus:outline-none focus:border-[#C5A880]"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-gray-700 dark:text-gray-300 block mb-1">
+                  Manzil va Mo'ljal: *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newBranchData.address}
+                  onChange={e => setNewBranchData({ ...newBranchData, address: e.target.value })}
+                  placeholder="Shahar, tuman, ko'cha, mo'ljal..."
+                  className="w-full p-2.5 rounded-xl border border-[#E8E2D8] dark:border-[#183F32] bg-[#FAF8F5] dark:bg-[#07130F] text-xs font-semibold focus:outline-none focus:border-[#C5A880]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-bold text-gray-700 dark:text-gray-300 block mb-1">
+                    Administrator F.I.Sh:
+                  </label>
+                  <input
+                    type="text"
+                    value={newBranchData.managerName}
+                    onChange={e => setNewBranchData({ ...newBranchData, managerName: e.target.value })}
+                    placeholder="Nilufar Karimova"
+                    className="w-full p-2.5 rounded-xl border border-[#E8E2D8] dark:border-[#183F32] bg-[#FAF8F5] dark:bg-[#07130F] text-xs font-semibold focus:outline-none focus:border-[#C5A880]"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-gray-700 dark:text-gray-300 block mb-1">
+                    Telefon:
+                  </label>
+                  <input
+                    type="text"
+                    value={newBranchData.phone}
+                    onChange={e => setNewBranchData({ ...newBranchData, phone: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-[#E8E2D8] dark:border-[#183F32] bg-[#FAF8F5] dark:bg-[#07130F] font-mono text-xs font-bold focus:outline-none focus:border-[#C5A880]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-gray-700 dark:text-gray-300 block mb-1">
+                  Xodim Retsepshn PIN-kodi (Ixtiyoriy, avtomatik yaratiladi):
+                </label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={newBranchData.staffPin}
+                  onChange={e => setNewBranchData({ ...newBranchData, staffPin: e.target.value })}
+                  placeholder="Masalan: 3002"
+                  className="w-full p-2.5 rounded-xl border border-[#E8E2D8] dark:border-[#183F32] bg-[#FAF8F5] dark:bg-[#07130F] font-mono text-xs font-bold focus:outline-none focus:border-[#C5A880]"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsAddBranchModalOpen(false)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 transition"
+              >
+                Bekor qilish
+              </button>
+              <button
+                type="submit"
+                className="flex-1 py-2.5 rounded-xl bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] text-xs font-bold transition shadow-md hover:scale-95 flex items-center justify-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Filialni Qo'shish</span>
               </button>
             </div>
           </form>

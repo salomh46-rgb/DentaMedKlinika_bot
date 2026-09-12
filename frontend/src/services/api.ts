@@ -1,5 +1,152 @@
-import { Doctor, Service, Appointment, Prescription, AppointmentStatus, StaffSession } from '../types';
-import { DOCTORS, SERVICES, INITIAL_RECEPTION_APPOINTMENTS, CLINICS } from '../data/mockData';
+import { Doctor, Service, Appointment, Prescription, AppointmentStatus, StaffSession, Tenant, Clinic } from '../types';
+import { DOCTORS, SERVICES, INITIAL_RECEPTION_APPOINTMENTS, CLINICS, TENANTS } from '../data/mockData';
+
+export interface TenantRegisterPayload {
+  name: string;
+  ownerName: string;
+  phone: string;
+  email?: string;
+  firstBranchName?: string;
+  firstBranchAddress?: string;
+}
+
+export interface TenantRegisterResult {
+  ok: boolean;
+  tenant?: Tenant;
+  branch?: Clinic;
+  ownerPin?: string;
+  staffPin?: string;
+  error?: string;
+}
+
+export function getStoredTenants(): Tenant[] {
+  try {
+    const custom = JSON.parse(localStorage.getItem('dentamed_custom_tenants') || '[]');
+    return [...TENANTS, ...custom];
+  } catch {
+    return TENANTS;
+  }
+}
+
+export function getStoredClinics(): Clinic[] {
+  try {
+    const custom = JSON.parse(localStorage.getItem('dentamed_custom_clinics') || '[]');
+    return [...CLINICS, ...custom];
+  } catch {
+    return CLINICS;
+  }
+}
+
+export function saveCustomTenantLocally(tenant: Tenant, branch: Clinic) {
+  try {
+    const customTenants: Tenant[] = JSON.parse(localStorage.getItem('dentamed_custom_tenants') || '[]');
+    if (!customTenants.some(t => t.id === tenant.id)) {
+      customTenants.push(tenant);
+      localStorage.setItem('dentamed_custom_tenants', JSON.stringify(customTenants));
+    }
+
+    const customClinics: Clinic[] = JSON.parse(localStorage.getItem('dentamed_custom_clinics') || '[]');
+    if (!customClinics.some(c => c.id === branch.id)) {
+      customClinics.push(branch);
+      localStorage.setItem('dentamed_custom_clinics', JSON.stringify(customClinics));
+    }
+  } catch (e) {
+    console.error('Error storing custom tenant locally', e);
+  }
+}
+
+export function addNewBranchLocally(branch: Clinic) {
+  try {
+    const customClinics: Clinic[] = JSON.parse(localStorage.getItem('dentamed_custom_clinics') || '[]');
+    customClinics.push(branch);
+    localStorage.setItem('dentamed_custom_clinics', JSON.stringify(customClinics));
+  } catch (e) {
+    console.error('Error adding branch locally', e);
+  }
+}
+
+export async function registerTenant(payload: TenantRegisterPayload): Promise<TenantRegisterResult> {
+  // 1. Try calling backend API
+  try {
+    const res = await fetch('/api/tenants/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.tenant && data.branch) {
+        saveCustomTenantLocally(data.tenant, data.branch);
+        return {
+          ok: true,
+          tenant: data.tenant,
+          branch: data.branch,
+          ownerPin: data.tenant.ownerPin,
+          staffPin: data.branch.staffPin
+        };
+      }
+    }
+  } catch (e) {
+    console.warn('Backend tenant registration unreachable, using resilient offline wizard', e);
+  }
+
+  // 2. Client-side & Offline Resilient Generation
+  const slug = payload.name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12) || `tenant${Date.now().toString().slice(-4)}`;
+  const ownerPin = Math.floor(1000 + Math.random() * 9000).toString();
+  const staffPin = Math.floor(3000 + Math.random() * 1000).toString();
+  const branchId = `${slug}-main`;
+
+  const newTenant: Tenant = {
+    id: slug,
+    name: payload.name,
+    tagline: {
+      uz: `${payload.name} Zamonaviy Tibbiyot Markazi (14 kun bepul)`,
+      ru: `Современный Медицинский Центр ${payload.name}`
+    },
+    badge: 'Yangi Hamkor',
+    defaultBranchId: branchId
+  };
+
+  // Add ownerPin to newTenant for offline verification
+  (newTenant as any).ownerPin = ownerPin;
+  (newTenant as any).ownerName = payload.ownerName;
+  (newTenant as any).phone = payload.phone;
+
+  const newBranch: Clinic = {
+    id: branchId,
+    tenantId: slug,
+    name: payload.firstBranchName || `${payload.name} (Bosh filial)`,
+    branchName: {
+      uz: payload.firstBranchName || `${payload.name} Bosh filial`,
+      ru: payload.firstBranchName || `Головной филиал ${payload.name}`
+    },
+    city: { uz: 'Toshkent', ru: 'Ташкент' },
+    address: {
+      uz: payload.firstBranchAddress || "Toshkent shahar, Markaziy ko'cha, 1-bino",
+      ru: payload.firstBranchAddress || 'г. Ташкент, ул. Центральная, 1'
+    },
+    landmark: { uz: 'Markaziy mo\'ljal', ru: 'Центральный ориентир' },
+    phone: payload.phone,
+    workingHours: {
+      uz: '08:00 - 20:00 (Har kuni)',
+      ru: '08:00 - 20:00 (Без выходных)'
+    },
+    badge: '1-Filial',
+    isMain: true,
+    staffPin: staffPin,
+    managerName: payload.ownerName
+  };
+
+  saveCustomTenantLocally(newTenant, newBranch);
+
+  return {
+    ok: true,
+    tenant: newTenant,
+    branch: newBranch,
+    ownerPin: ownerPin,
+    staffPin: staffPin
+  };
+}
 
 export async function loginStaff(pin: string): Promise<{ ok: boolean; session?: StaffSession; error?: string }> {
   const cleanPin = pin.trim();
@@ -32,8 +179,8 @@ export async function loginStaff(pin: string): Promise<{ ok: boolean; session?: 
       role: 'clinic_director',
       tenantId: 'dentamed',
       staffName: 'Dr. Jamshid Rustamov',
-      titleUz: '👑 Klinika Rahbari (Barcha 5 ta filial)',
-      titleRu: '👑 Руководитель клиники (Все 5 филиалов)',
+      titleUz: '👑 DentaMed Rahbari (Barcha 5 ta filial)',
+      titleRu: '👑 Руководитель DentaMed (Все 5 филиалов)',
       isDirector: true,
       allowedClinicIds: ['nukus', 'chilonzor', 'yunusobod', 'samarqand', 'buxoro']
     };
@@ -68,8 +215,28 @@ export async function loginStaff(pin: string): Promise<{ ok: boolean; session?: 
     return { ok: true, session };
   }
 
-  // 4. Branch Receptionists (Nukus: 1001, Chilonzor: 1002, Yunusobod: 1003, Samarqand: 1004, Buxoro: 1005, GrandMed: 2001, 2002)
-  const matchedBranch = CLINICS.find(c => c.staffPin === cleanPin);
+  // 4. Check dynamic registered tenants from localStorage
+  const allTenants = getStoredTenants();
+  const allClinics = getStoredClinics();
+
+  for (const t of allTenants) {
+    if ((t as any).ownerPin && String((t as any).ownerPin).trim() === cleanPin) {
+      const branches = allClinics.filter(c => c.tenantId === t.id);
+      const session: StaffSession = {
+        role: 'clinic_director',
+        tenantId: t.id,
+        staffName: (t as any).ownerName || 'Klinika Rahbari',
+        titleUz: `👑 ${t.name} Rahbari (Barcha filiallar)`,
+        titleRu: `👑 Руководитель ${t.name} (Все филиалы)`,
+        isDirector: true,
+        allowedClinicIds: branches.map(b => b.id)
+      };
+      return { ok: true, session };
+    }
+  }
+
+  // 5. Check Branch Staff PINs (Receptionists)
+  const matchedBranch = allClinics.find(c => c.staffPin === cleanPin);
   if (matchedBranch) {
     const session: StaffSession = {
       role: 'reception',
@@ -86,7 +253,7 @@ export async function loginStaff(pin: string): Promise<{ ok: boolean; session?: 
 
   return {
     ok: false,
-    error: "Noto'g'ri PIN-kod! (Rahbar: 7777, Nukus: 1001, Chilonzor: 1002, Yunusobod: 1003, Samarqand: 1004, Buxoro: 1005)"
+    error: "Noto'g'ri PIN-kod! (Rahbar: 7777 / 8888, Nukus: 1001, Chilonzor: 1002, GrandMed: 2001)"
   };
 }
 
