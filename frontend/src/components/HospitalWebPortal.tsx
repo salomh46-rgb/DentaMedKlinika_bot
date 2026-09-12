@@ -736,6 +736,42 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
   const [smsTemplate2h, setSmsTemplate2h] = useState('Hurmatli {bemor}, bugun soat {vaqt} da DentaMed klinikasida {shifokor} qabuliga yozilgansiz. Manzil: {manzil}. Tel: +998 71 200-00-00');
   const [smsTemplate1d, setSmsTemplate1d] = useState('Eslatma: Ertaga soat {vaqt} da DentaMed Atelier qabulingiz bor. Kechikmasdan kelishingizni so\'raymiz.');
   const [smsTemplateRx, setSmsTemplateRx] = useState('Hurmatli {bemor}, davolash yakunlandi. Raqamli retseptingiz tayyor: https://dentamed.uz/rx/{pin}');
+  const [smsSaveSuccess, setSmsSaveSuccess] = useState(false);
+
+  // Sync SMS settings per Tenant
+  useEffect(() => {
+    try {
+      const storedSms = localStorage.getItem(`dentamed_sms_${currentTenant.id}`);
+      if (storedSms) {
+        const parsed = JSON.parse(storedSms);
+        if (parsed.token) setEskizToken(parsed.token);
+        if (parsed.template2h) setSmsTemplate2h(parsed.template2h);
+        if (parsed.template1d) setSmsTemplate1d(parsed.template1d);
+        if (parsed.templateRx) setSmsTemplateRx(parsed.templateRx);
+      } else {
+        setSmsTemplate2h(`Hurmatli {bemor}, bugun soat {vaqt} da ${currentTenant.name} klinikasida {shifokor} qabuliga yozilgansiz. Manzil: {manzil}. Tel: +998 71 200-00-00`);
+        setSmsTemplate1d(`Eslatma: Ertaga soat {vaqt} da ${currentTenant.name} qabulingiz bor. Kechikmasdan kelishingizni so'raymiz.`);
+        setSmsTemplateRx(`Hurmatli {bemor}, davolash yakunlandi. Raqamli retseptingiz tayyor: https://dentamed.uz/rx/{pin}`);
+      }
+    } catch {
+      // fallback
+    }
+  }, [currentTenant.id, currentTenant.name]);
+
+  const handleSaveSmsSettings = () => {
+    try {
+      localStorage.setItem(`dentamed_sms_${currentTenant.id}`, JSON.stringify({
+        token: eskizToken,
+        template2h: smsTemplate2h,
+        template1d: smsTemplate1d,
+        templateRx: smsTemplateRx
+      }));
+    } catch (e) {
+      console.error(e);
+    }
+    setSmsSaveSuccess(true);
+    setTimeout(() => setSmsSaveSuccess(false), 3000);
+  };
   
   // Test SMS State
   const [testSmsPhone, setTestSmsPhone] = useState('+998 90 123-45-67');
@@ -2176,6 +2212,20 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
                     className="w-full p-2.5 rounded-xl border border-[#E8E2D8] dark:border-[#183F32] bg-[#FAF8F5] dark:bg-[#07130F] text-xs focus:outline-none focus:border-[#C5A880]"
                   />
                 </div>
+
+                {smsSaveSuccess && (
+                  <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-semibold flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>SMS sozlamalari va shablonlar ushbu klinika uchun saqlandi!</span>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleSaveSmsSettings}
+                  className="w-full py-2.5 rounded-xl bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] text-xs font-bold transition shadow-sm hover:scale-95"
+                >
+                  Shablonlarni Saqlash
+                </button>
               </div>
             </div>
 
@@ -2318,10 +2368,10 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
                 style={{ fontFamily: 'Courier New, Courier, monospace' }}
               >
                 <div className="text-center pb-2 border-b border-dashed border-black">
-                  <div className="font-black text-sm uppercase">DentaMed Atelier</div>
-                  <div className="text-[10px]">Luks Stomatologiya & LOR Markazi</div>
-                  <div className="text-[9px]">Toshkent sh., Mirobod t., Nukus ko'chasi, 24</div>
-                  <div className="text-[9px]">Tel: +998 (71) 200-00-00</div>
+                  <div className="font-black text-sm uppercase">{currentTenant.name}</div>
+                  <div className="text-[10px]">{visibleBranches.find(b => b.id === receiptAppointment.clinicId)?.name || currentTenant.name}</div>
+                  <div className="text-[9px]">{visibleBranches.find(b => b.id === receiptAppointment.clinicId)?.address?.uz || (visibleBranches.find(b => b.id === receiptAppointment.clinicId) as any)?.address || "Toshkent shahri"}</div>
+                  <div className="text-[9px]">Tel: {visibleBranches.find(b => b.id === receiptAppointment.clinicId)?.phone || "+998 (71) 200-00-00"}</div>
                   <div className="text-[9px]">STIR (INN): 308942189</div>
                 </div>
 
