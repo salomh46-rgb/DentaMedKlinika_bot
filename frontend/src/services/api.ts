@@ -257,6 +257,40 @@ export async function loginStaff(pin: string): Promise<{ ok: boolean; session?: 
   };
 }
 
+export function getStoredDoctors(): Doctor[] {
+  try {
+    const custom: Doctor[] = JSON.parse(localStorage.getItem('dentamed_custom_doctors') || '[]');
+    return [...DOCTORS, ...custom];
+  } catch {
+    return DOCTORS;
+  }
+}
+
+export function saveDoctorLocally(doctor: Doctor) {
+  try {
+    const custom: Doctor[] = JSON.parse(localStorage.getItem('dentamed_custom_doctors') || '[]');
+    const existingIdx = custom.findIndex(d => d.id === doctor.id);
+    if (existingIdx >= 0) {
+      custom[existingIdx] = doctor;
+    } else {
+      custom.push(doctor);
+    }
+    localStorage.setItem('dentamed_custom_doctors', JSON.stringify(custom));
+  } catch (e) {
+    console.error('Error saving doctor locally', e);
+  }
+}
+
+export function deleteDoctorLocally(id: number) {
+  try {
+    let custom: Doctor[] = JSON.parse(localStorage.getItem('dentamed_custom_doctors') || '[]');
+    custom = custom.filter(d => d.id !== id);
+    localStorage.setItem('dentamed_custom_doctors', JSON.stringify(custom));
+  } catch (e) {
+    console.error('Error deleting doctor locally', e);
+  }
+}
+
 export async function fetchDoctors(): Promise<Doctor[]> {
   try {
     const res = await fetch('/api/doctors');
@@ -269,7 +303,7 @@ export async function fetchDoctors(): Promise<Doctor[]> {
   } catch (e) {
     console.warn('Could not fetch doctors from backend API, using local backup', e);
   }
-  return DOCTORS;
+  return getStoredDoctors();
 }
 
 export async function fetchServices(): Promise<Service[]> {

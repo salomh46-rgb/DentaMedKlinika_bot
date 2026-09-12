@@ -234,6 +234,7 @@ export const CLINICS: Clinic[] = [
 export const DOCTORS: Doctor[] = [
   {
     id: 1,
+    tenantId: 'dentamed',
     name: 'Dr. Jamshid Rustamov',
     specialty: {
       uz: 'Bosh Stomatolog-Implantolog',
@@ -249,6 +250,7 @@ export const DOCTORS: Doctor[] = [
   },
   {
     id: 2,
+    tenantId: 'dentamed',
     name: 'Dr. Shahlo Karimova',
     specialty: {
       uz: 'Ortodont (Breket & Eylayner)',
@@ -264,6 +266,7 @@ export const DOCTORS: Doctor[] = [
   },
   {
     id: 3,
+    tenantId: 'dentamed',
     name: 'Dr. Bobur Mahmudov',
     specialty: {
       uz: 'Oliy toifali LOR-Jarroh (Endoskopiya)',
@@ -279,6 +282,7 @@ export const DOCTORS: Doctor[] = [
   },
   {
     id: 4,
+    tenantId: 'dentamed',
     name: 'Dr. Dilnoza Alimova',
     specialty: {
       uz: 'Bolalar LOR Shifokori & Audiolog',
@@ -294,6 +298,7 @@ export const DOCTORS: Doctor[] = [
   },
   {
     id: 5,
+    tenantId: 'dentamed',
     name: 'Dr. Aziz Karimov',
     specialty: {
       uz: 'Implantolog-Ortoped & Jarroh',
@@ -309,6 +314,7 @@ export const DOCTORS: Doctor[] = [
   },
   {
     id: 6,
+    tenantId: 'dentamed',
     name: 'Dr. Nilufar Saidova',
     specialty: {
       uz: 'Estetik Stomatolog (Vinirlar)',
@@ -324,6 +330,7 @@ export const DOCTORS: Doctor[] = [
   },
   {
     id: 7,
+    tenantId: 'grandmed',
     name: 'Dr. Alisher Vohidov',
     specialty: {
       uz: 'Bosh Jarroh-Implantolog (GrandMed)',
@@ -339,6 +346,7 @@ export const DOCTORS: Doctor[] = [
   },
   {
     id: 8,
+    tenantId: 'grandmed',
     name: 'Dr. Kamola Rasulova',
     specialty: {
       uz: 'LOR-Mutaxassis & Foniator',

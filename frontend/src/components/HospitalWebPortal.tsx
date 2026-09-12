@@ -24,7 +24,10 @@ import {
   registerTenant,
   addNewBranchLocally,
   getStoredTenants,
-  getStoredClinics
+  getStoredClinics,
+  getStoredDoctors,
+  saveDoctorLocally,
+  deleteDoctorLocally
 } from '../services/api';
 import {
   Key,
@@ -355,9 +358,26 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
 
   // Core Data
   const [appointments, setAppointments] = useState<Appointment[]>(INITIAL_RECEPTION_APPOINTMENTS);
-  const [doctors, setDoctors] = useState<Doctor[]>(DOCTORS);
+  const [doctors, setDoctors] = useState<Doctor[]>(() => getStoredDoctors());
   const [services, setServices] = useState<Service[]>(SERVICES);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Strictly Isolated Doctors for Current Tenant
+  const tenantDoctors = useMemo(() => {
+    if (!activeSession || activeSession.role === 'super_admin' || activeSession.tenantId === 'all') {
+      return doctors;
+    }
+    return doctors.filter(d => (d.tenantId || 'dentamed') === currentTenant.id);
+  }, [doctors, currentTenant, activeSession]);
+
+  // Strictly Isolated Appointments for Current Tenant's Branches
+  const tenantAppts = useMemo(() => {
+    const allowedBranchIds = visibleBranches.map(b => b.id);
+    if (!activeSession || activeSession.role === 'super_admin' || activeSession.tenantId === 'all') {
+      return appointments;
+    }
+    return appointments.filter(a => allowedBranchIds.includes(a.clinicId || 'nukus'));
+  }, [appointments, visibleBranches, activeSession]);
 
   // Sync data from API on mount
   useEffect(() => {
@@ -390,16 +410,11 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
     }
   };
 
-  // Filtered appointments by branch
+  // Filtered appointments by branch (Within the tenant's isolated data)
   const branchFilteredAppointments = useMemo(() => {
-    const allowedIds = visibleBranches.map(b => b.id);
-    const pool = activeSession?.role === 'super_admin' || !activeSession
-      ? appointments
-      : appointments.filter(a => allowedIds.includes(a.clinicId || 'nukus'));
-
-    if (selectedBranchId === 'all') return pool;
-    return pool.filter(a => (a.clinicId || 'nukus') === selectedBranchId);
-  }, [appointments, selectedBranchId, visibleBranches, activeSession]);
+    if (selectedBranchId === 'all') return tenantAppts;
+    return tenantAppts.filter(a => (a.clinicId || 'nukus') === selectedBranchId);
+  }, [tenantAppts, selectedBranchId]);
 
   // ==========================================
   // TAB 1: FRONT-DESK (RECEPTION) STATES
@@ -523,10 +538,17 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
   // ==========================================
   // TAB 2: DOCTOR SUITE (SHIFOKOR KABINETI)
   // ==========================================
-  const [selectedDoctorId, setSelectedDoctorId] = useState<number>(DOCTORS[0]?.id || 1);
+  const [selectedDoctorId, setSelectedDoctorId] = useState<number>(tenantDoctors[0]?.id || 1);
+
+  useEffect(() => {
+    if (tenantDoctors.length > 0 && !tenantDoctors.some(d => d.id === selectedDoctorId)) {
+      setSelectedDoctorId(tenantDoctors[0].id);
+    }
+  }, [tenantDoctors, selectedDoctorId]);
+
   const activeDoctor = useMemo(() => {
-    return doctors.find(d => d.id === selectedDoctorId) || doctors[0];
-  }, [doctors, selectedDoctorId]);
+    return tenantDoctors.find(d => d.id === selectedDoctorId) || tenantDoctors[0] || null;
+  }, [tenantDoctors, selectedDoctorId]);
 
   // 32-Teeth Odontogram State for Doctor Suite
   const [teethChart, setTeethChart] = useState<ToothData[]>(INITIAL_TEETH);
@@ -536,10 +558,11 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
   const [isLunchBlocked, setIsLunchBlocked] = useState<boolean>(true);
   const [isWeekendBlocked, setIsWeekendBlocked] = useState<boolean>(false);
 
-  // Doctor's assigned patients today
+  // Doctor's assigned patients today (Scoped strictly to active tenant's branch appointments)
   const doctorTodayAppointments = useMemo(() => {
-    return appointments.filter(a => a.doctor.id === selectedDoctorId);
-  }, [appointments, selectedDoctorId]);
+    if (!activeDoctor) return [];
+    return branchFilteredAppointments.filter(a => a.doctor.id === activeDoctor.id);
+  }, [branchFilteredAppointments, activeDoctor]);
 
   // Update tooth condition in Doctor Suite
   const handleUpdateToothCondition = (toothNum: number, condition: ToothData['condition']) => {
@@ -562,11 +585,39 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
   const [docExp, setDocExp] = useState(8);
   const [docPhotoBase64, setDocPhotoBase64] = useState('');
 
-  // Promo Banner Settings
+  // Promo Banner Settings (Isolated & Synced per Tenant)
   const [promoTitle, setPromoTitle] = useState('2 ta tish davolansa, ultratovushli tozalash 50% chegirmada!');
   const [promoDiscount, setPromoDiscount] = useState(50);
   const [isPromoActive, setIsPromoActive] = useState(true);
   const [promoSaveSuccess, setPromoSaveSuccess] = useState(false);
+
+  useEffect(() => {
+    try {
+      const storedPromo = localStorage.getItem(`dentamed_promo_${currentTenant.id}`);
+      if (storedPromo) {
+        const parsed = JSON.parse(storedPromo);
+        setPromoTitle(parsed.title || '');
+        setPromoDiscount(parsed.discount ?? 50);
+        setIsPromoActive(parsed.isActive ?? true);
+      } else {
+        if (currentTenant.id === 'dentamed') {
+          setPromoTitle('2 ta tish davolansa, ultratovushli tozalash 50% chegirmada!');
+          setPromoDiscount(50);
+          setIsPromoActive(true);
+        } else if (currentTenant.id === 'grandmed') {
+          setPromoTitle('Shveysariya implanti + 3D tomografiya 100% bepul!');
+          setPromoDiscount(30);
+          setIsPromoActive(true);
+        } else {
+          setPromoTitle(`${currentTenant.name}: Birinchi ko'rik va diagnostika bepul!`);
+          setPromoDiscount(20);
+          setIsPromoActive(true);
+        }
+      }
+    } catch {
+      // fallback
+    }
+  }, [currentTenant.id, currentTenant.name]);
 
   // Handle Photo File (Base64)
   const handleDocPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -595,15 +646,19 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
               specialty: { uz: docSpecUz, ru: docSpecUz },
               department: docDept,
               experience: docExp,
-              photo: docPhotoBase64 || d.photo
+              photo: docPhotoBase64 || d.photo,
+              tenantId: d.tenantId || currentTenant.id
             }
           : d
       );
       setDoctors(updated);
+      const targetDoc = updated.find(d => d.id === editingDoc.id);
+      if (targetDoc) saveDoctorLocally(targetDoc);
     } else {
       // Create
       const newDoc: Doctor = {
         id: Date.now(),
+        tenantId: currentTenant.id,
         name: docName,
         specialty: { uz: docSpecUz, ru: docSpecUz },
         department: docDept,
@@ -614,6 +669,7 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
         availableDays: ['Dush', 'Sesh', 'Chor', 'Pay', 'Jum', 'Shan']
       };
       setDoctors([newDoc, ...doctors]);
+      saveDoctorLocally(newDoc);
     }
     setIsDocModalOpen(false);
     setEditingDoc(null);
@@ -625,17 +681,19 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
   const handleDeleteDoctor = (id: number) => {
     if (confirm(lang === 'uz' ? 'Shifokorni o\'chirmoqchimisiz?' : 'Удалить врача?')) {
       setDoctors(doctors.filter(d => d.id !== id));
+      deleteDoctorLocally(id);
     }
   };
 
-  // Financial KPIs and 30% Doctor share calculation
+  // Financial KPIs and 30% Doctor share calculation - strictly tenant scoped
   const financeKPIs = useMemo(() => {
     let totalRevenue = 0;
     let cashTotal = 0;
     let cardTotal = 0;
     let clickTotal = 0;
 
-    const completedAppts = appointments.filter(a => a.status === 'completed' || a.status === 'in_progress');
+    const currentScopeAppts = selectedBranchId === 'all' ? tenantAppts : branchFilteredAppointments;
+    const completedAppts = currentScopeAppts.filter(a => a.status === 'completed' || a.status === 'in_progress');
     
     completedAppts.forEach((a, idx) => {
       const amt = a.totalAmount || a.service.price || 400000;
@@ -645,8 +703,8 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
       else clickTotal += amt;
     });
 
-    // Doctor 30% KPI table
-    const docKPIList = doctors.map(doc => {
+    // Doctor 30% KPI table - strictly mapped over tenantDoctors
+    const docKPIList = tenantDoctors.map(doc => {
       const docAppts = completedAppts.filter(a => a.doctor.id === doc.id);
       const docRev = docAppts.reduce((acc, a) => acc + (a.totalAmount || a.service.price || 400000), 0);
       const doctorShare = Math.round(docRev * 0.3); // 30% KPI
@@ -668,7 +726,7 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
       clickTotal,
       docKPIList
     };
-  }, [appointments, doctors]);
+  }, [tenantAppts, branchFilteredAppointments, selectedBranchId, tenantDoctors]);
 
   // ==========================================
   // TAB 4: ESKIZ.UZ SMS SETTINGS & TEMPLATES
@@ -1296,7 +1354,7 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
                     </span>
                   </div>
                   <h2 className="font-serif text-lg font-bold text-[#112E24] dark:text-[#FAF8F5] mt-0.5">
-                    {activeDoctor.name} — Bemorlar Jag' Xaritasi
+                    {activeDoctor ? activeDoctor.name : (lang === 'uz' ? 'Shifokor biriktirilmagan' : 'Врач не назначен')} — Bemorlar Jag' Xaritasi
                   </h2>
                 </div>
 
@@ -1308,14 +1366,37 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
                     onChange={e => setSelectedDoctorId(Number(e.target.value))}
                     className="bg-[#FAF8F5] dark:bg-[#07130F] border border-[#E8E2D8] dark:border-[#183F32] rounded-xl px-3 py-1.5 text-xs font-bold text-[#112E24] dark:text-[#FAF8F5] focus:outline-none focus:border-[#C5A880]"
                   >
-                    {doctors.map(d => (
+                    {tenantDoctors.map(d => (
                       <option key={d.id} value={d.id}>
                         {d.name} ({d.department === 'stomatology' ? 'Stomatolog' : 'LOR'})
                       </option>
                     ))}
+                    {tenantDoctors.length === 0 && (
+                      <option value="">(Shifokorlar mavjud emas)</option>
+                    )}
                   </select>
                 </div>
               </div>
+
+              {tenantDoctors.length === 0 ? (
+                <div className="py-16 px-6 text-center bg-[#FAF8F5] dark:bg-[#07130F] rounded-2xl border border-dashed border-[#E8E2D8] dark:border-[#183F32] space-y-3">
+                  <Users className="w-12 h-12 text-[#C5A880] mx-auto opacity-40" />
+                  <h3 className="font-serif font-bold text-base text-[#112E24] dark:text-[#FAF8F5]">
+                    Ushbu filialda hozircha shifokorlar mavjud emas
+                  </h3>
+                  <p className="text-xs text-gray-500 max-w-md mx-auto">
+                    Klinika rahbari sifatida yangi shifokorlarni kiritish va xaritani faollashtirish uchun Boshqaruv bo'limiga o'ting.
+                  </p>
+                  <button
+                    onClick={() => setActiveTab('ceo_finance')}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] text-xs font-bold transition shadow-sm hover:scale-95"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Shifokor Qo'shish (CEO Hub)</span>
+                  </button>
+                </div>
+              ) : (
+                <>
 
               {/* 32 Teeth Visual Grid: Upper Arch (18..11, 21..28) & Lower Arch (48..41, 31..38) */}
               <div className="space-y-6 bg-[#FAF8F5] dark:bg-[#07130F] p-6 rounded-2xl border border-[#E8E2D8] dark:border-[#183F32]">
@@ -1461,6 +1542,8 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
                     </button>
                   </div>
                 </div>
+              )}
+                </>
               )}
             </div>
 
@@ -1775,7 +1858,14 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E8E2D8] dark:divide-[#183F32]">
-                    {financeKPIs.docKPIList.map(item => (
+                    {financeKPIs.docKPIList.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-gray-500 text-xs">
+                          Hozircha hisoblangan shifokorlar mavjud emas
+                        </td>
+                      </tr>
+                    ) : (
+                      financeKPIs.docKPIList.map(item => (
                       <tr key={item.doctor.id} className="hover:bg-[#FAF8F5]/60 dark:hover:bg-[#07130F]/40 transition">
                         <td className="py-3 px-4 font-bold text-[#112E24] dark:text-[#FAF8F5] flex items-center gap-2">
                           <img
@@ -1806,7 +1896,7 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
                           </span>
                         </td>
                       </tr>
-                    ))}
+                    )))}
                   </tbody>
                 </table>
               </div>
@@ -1841,7 +1931,27 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {doctors.map(doc => (
+                  {tenantDoctors.length === 0 ? (
+                    <div className="col-span-full py-12 text-center bg-[#FAF8F5] dark:bg-[#07130F] rounded-2xl border border-dashed border-[#E8E2D8] dark:border-[#183F32] space-y-2">
+                      <Users className="w-8 h-8 mx-auto text-[#C5A880] opacity-50" />
+                      <p className="text-xs font-bold text-[#112E24] dark:text-[#FAF8F5]">Hozircha biriktirilgan shifokorlar yo'q</p>
+                      <p className="text-[11px] text-gray-500">Ushbu klinika uchun birinchi shifokorni ro'yxatdan o'tkazing</p>
+                      <button
+                        onClick={() => {
+                          setEditingDoc(null);
+                          setDocName('');
+                          setDocSpecUz('');
+                          setDocPhotoBase64('');
+                          setIsDocModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1 mt-2 text-xs font-bold text-[#C5A880] hover:underline"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Birinchi Shifokorni Qo'shish</span>
+                      </button>
+                    </div>
+                  ) : (
+                    tenantDoctors.map(doc => (
                     <div
                       key={doc.id}
                       className="p-3.5 rounded-2xl border border-[#E8E2D8] dark:border-[#183F32] bg-[#FAF8F5] dark:bg-[#07130F] flex items-center justify-between gap-3 hover:border-[#C5A880] transition"
@@ -1890,7 +2000,7 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
                         </button>
                       </div>
                     </div>
-                  ))}
+                  )))}
                 </div>
               </div>
 
@@ -1960,6 +2070,15 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
 
                   <button
                     onClick={() => {
+                      try {
+                        localStorage.setItem(`dentamed_promo_${currentTenant.id}`, JSON.stringify({
+                          title: promoTitle,
+                          discount: promoDiscount,
+                          isActive: isPromoActive
+                        }));
+                      } catch (err) {
+                        console.error(err);
+                      }
                       setPromoSaveSuccess(true);
                       setTimeout(() => setPromoSaveSuccess(false), 3000);
                     }}

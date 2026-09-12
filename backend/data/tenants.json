@@ -281,5 +281,19 @@
       "shifonurmed16-main"
     ],
     "createdAt": "2026-09-12T15:11:05.025715+05:00"
+  },
+  {
+    "id": "shifonurmed17",
+    "name": "Shifo Nur Med",
+    "ownerName": "Dr. Botir Qodirov",
+    "ownerPin": "28109",
+    "phone": "+998 71 200-77-77",
+    "email": "botir@shifonur.uz",
+    "logo": "/images/shifonurmed17_logo.png",
+    "status": "active",
+    "branchIds": [
+      "shifonurmed17-main"
+    ],
+    "createdAt": "2026-09-12T22:11:43.599571+05:00"
   }
 ]
