@@ -1891,6 +1891,33 @@ def pay_debt(appointment_id: str, payload: DebtPaymentModel):
         "debt": record
     }
 
+class SmsSendModel(BaseModel):
+    phone: str
+    message: str
+
+@app.post("/api/sms/send")
+async def send_sms_api(payload: SmsSendModel):
+    try:
+        from sms_service import send_sms_notification
+    except ImportError:
+        from backend.sms_service import send_sms_notification
+    success = await send_sms_notification(payload.phone, payload.message)
+    return {"status": "success" if success else "failed", "phone": payload.phone}
+
+@app.get("/api/db/health")
+def db_health():
+    try:
+        from db import db
+    except ImportError:
+        from backend.db import db
+    return {
+        "status": "healthy",
+        "mode": "postgresql" if db.is_postgres else "json_file",
+        "tenantsCount": len(db.get_tenants()),
+        "clinicsCount": len(db.get_clinics()),
+        "doctorsCount": len(db.get_doctors())
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=False)

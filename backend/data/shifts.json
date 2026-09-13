@@ -1,5 +1,25 @@
 [
   {
+    "id": "SHIFT-1789295934",
+    "clinicId": "test_clinic_c64ac8",
+    "tenantId": "test_tenant_3e22c0",
+    "cashierName": "Dilnoza Rahimova",
+    "startingCash": 500000,
+    "openedAt": "2026-09-13T15:38:54.289169+05:00",
+    "status": "closed",
+    "notes": "Kassa to'liq mos keldi",
+    "closedAt": "2026-09-13T15:38:54.310285+05:00",
+    "actualCash": 450000,
+    "expectedCash": 450000,
+    "difference": 0,
+    "totalRevenue": 0,
+    "cashRevenue": 0,
+    "cardRevenue": 0,
+    "onlineRevenue": 0,
+    "totalExpense": 50000,
+    "appointmentsCount": 0
+  },
+  {
     "id": "SHIFT-1789293149",
     "clinicId": "test_clinic_be7dbc",
     "tenantId": "test_tenant_668d42",

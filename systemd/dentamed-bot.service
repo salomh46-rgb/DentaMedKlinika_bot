@@ -1,0 +1,15 @@
+﻿[Unit]
+Description=DentaMed aiogram 3 Telegram Bot Daemon
+After=network.target dentamed-api.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/dental_lor_med
+EnvironmentFile=/var/www/dental_lor_med/backend/.env
+ExecStart=/usr/bin/python3 backend/bot.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
