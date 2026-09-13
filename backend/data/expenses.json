@@ -1,5 +1,35 @@
 [
   {
+    "id": "EXP-1789293149",
+    "clinicId": "test_clinic_be7dbc",
+    "tenantId": "test_tenant_668d42",
+    "category": "materiallar",
+    "amount": 50000,
+    "recipient": "StomMarket MChJ",
+    "comment": "Bir martalik shpritslar",
+    "createdAt": "2026-09-13T14:52:29.630968+05:00"
+  },
+  {
+    "id": "EXP-1789291526",
+    "clinicId": "test_clinic_32485d",
+    "tenantId": "test_tenant_c556aa",
+    "category": "materiallar",
+    "amount": 50000,
+    "recipient": "StomMarket MChJ",
+    "comment": "Bir martalik shpritslar",
+    "createdAt": "2026-09-13T14:25:26.589949+05:00"
+  },
+  {
+    "id": "EXP-1789291505",
+    "clinicId": "test_clinic_f2c22e",
+    "tenantId": "test_tenant_9ecde6",
+    "category": "materiallar",
+    "amount": 50000,
+    "recipient": "StomMarket MChJ",
+    "comment": "Bir martalik shpritslar",
+    "createdAt": "2026-09-13T14:25:05.880742+05:00"
+  },
+  {
     "id": "EXP-1789290283",
     "clinicId": "test_clinic_1d1acd",
     "tenantId": "test_tenant_bc8878",

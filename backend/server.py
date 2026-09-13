@@ -695,8 +695,41 @@ def get_tenant_detail(tenant_id: str):
     t_copy["branchesCount"] = len(t_branches)
     return t_copy
 
+# Brute-force rate limiting: ip -> list of failed attempt datetimes
+FAILED_LOGIN_ATTEMPTS: Dict[str, List[datetime]] = {}
+MAX_FAILED_LOGINS = 5
+LOCKOUT_PERIOD_SECONDS = 15 * 60  # 15 minutes
+
+def check_login_rate_limit(client_ip: str):
+    now = datetime.now(TASHKENT_TZ)
+    if client_ip in FAILED_LOGIN_ATTEMPTS:
+        recent_attempts = [
+            t for t in FAILED_LOGIN_ATTEMPTS[client_ip]
+            if (now - t).total_seconds() < LOCKOUT_PERIOD_SECONDS
+        ]
+        FAILED_LOGIN_ATTEMPTS[client_ip] = recent_attempts
+        if len(recent_attempts) >= MAX_FAILED_LOGINS:
+            wait_mins = max(1, int((LOCKOUT_PERIOD_SECONDS - (now - recent_attempts[0]).total_seconds()) / 60) + 1)
+            raise HTTPException(
+                status_code=429,
+                detail=f"Xavfsizlik qulfi: 5 marta xato PIN kiritildi. Iltimos, {wait_mins} daqiqadan so'ng qayta urinib ko'ring yoki bosh ma'murga murojaat qiling."
+            )
+
+def record_failed_login(client_ip: str):
+    now = datetime.now(TASHKENT_TZ)
+    if client_ip not in FAILED_LOGIN_ATTEMPTS:
+        FAILED_LOGIN_ATTEMPTS[client_ip] = []
+    FAILED_LOGIN_ATTEMPTS[client_ip].append(now)
+
+def clear_failed_logins(client_ip: str):
+    if client_ip in FAILED_LOGIN_ATTEMPTS:
+        del FAILED_LOGIN_ATTEMPTS[client_ip]
+
 @app.post("/api/staff/login")
-def staff_login(payload: StaffLoginModel):
+def staff_login(payload: StaffLoginModel, request: Request):
+    client_ip = request.client.host if request.client else "unknown"
+    check_login_rate_limit(client_ip)
+
     pin = (payload.pinCode or payload.pin or "").strip()
     tenants = load_json_file(TENANTS_FILE)
     clinics = load_json_file(CLINICS_FILE)
@@ -704,6 +737,7 @@ def staff_login(payload: StaffLoginModel):
     # 1. Check Owner / Director PINs
     for t in tenants:
         if str(t.get("ownerPin", "")).strip() == pin or (pin == "7777" and t.get("id") == "dentamed") or (pin == "8888" and t.get("id") == "grandmed"):
+            clear_failed_logins(client_ip)
             allowed_branches = [c["id"] for c in clinics if c.get("tenantId") == t.get("id")]
             branch_count = len(allowed_branches)
             title_uz = f"👑 Klinika Rahbari (Barcha {branch_count} ta filial)" if t.get("id") == "dentamed" else f"👑 {t.get('name')} Rahbari (Barcha filiallar)"
@@ -730,6 +764,7 @@ def staff_login(payload: StaffLoginModel):
 
     # 2. Super Admin PIN (2026, 0000)
     if pin in ["2026", "0000"]:
+        clear_failed_logins(client_ip)
         all_branches = [c["id"] for c in clinics]
         session_data = {
             "role": "super_admin",
@@ -753,6 +788,7 @@ def staff_login(payload: StaffLoginModel):
     # 3. Check Branch Staff PINs (Receptionists: 1001-1005, 2001-2002, etc.)
     for c in clinics:
         if str(c.get("staffPin", "")).strip() == pin:
+            clear_failed_logins(client_ip)
             t_id = c.get("tenantId", "dentamed")
             parent_tenant = next((t for t in tenants if t.get("id") == t_id), None)
             t_name = parent_tenant.get("name") if parent_tenant else "DentaMed Atelier"
@@ -779,7 +815,8 @@ def staff_login(payload: StaffLoginModel):
                 "staffName": c.get("managerName", "Filial Retsepshni")
             }
 
-    raise HTTPException(status_code=401, detail="Noto'g'ri PIN-kod! (Rahbar: 7777, Nukus: 1001, Chilonzor: 1002, Yunusobod: 1003, Samarqand: 1004, Buxoro: 1005)")
+    record_failed_login(client_ip)
+    raise HTTPException(status_code=401, detail="Noto'g'ri PIN-kod! Qayta urinib ko'ring.")
 
 @app.post("/api/tenants/register")
 def register_tenant(payload: TenantRegisterModel):

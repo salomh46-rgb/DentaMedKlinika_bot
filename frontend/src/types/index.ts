@@ -160,7 +160,11 @@ export interface Shift {
   onlineRevenue?: number;
   totalExpense?: number;
   appointmentsCount?: number;
+  expenses?: any[];
 }
+
+export type PatientDebt = DebtRecord | any;
+export type ZReportSummary = any;
 
 export interface DebtPaymentHistory {
   amount: number;

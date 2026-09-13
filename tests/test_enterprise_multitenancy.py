@@ -179,6 +179,21 @@ def test_staff_login_roles_and_branches():
     res_bad = client.post("/api/staff/login", json={"pinCode": "9999"})
     assert res_bad.status_code == 401
 
+    # G) Brute-force himoyasi: 5 marta ketma-ket xato kiritilgach, 6-si 429 qaytarishi shart!
+    for _ in range(3):
+        client.post("/api/staff/login", json={"pinCode": "9999"})
+    # 5th attempt
+    res_bad_5th = client.post("/api/staff/login", json={"pinCode": "9999"})
+    assert res_bad_5th.status_code == 401
+    # 6th attempt -> 429 Too Many Requests (Lockout)
+    res_locked = client.post("/api/staff/login", json={"pinCode": "9999"})
+    assert res_locked.status_code == 429
+    assert "Xavfsizlik qulfi" in res_locked.json().get("detail", "")
+
+    # Muvaffaqiyatli kirish bilan tozalash
+    from server import clear_failed_logins
+    clear_failed_logins("testclient")
+
 
 def test_doctors_and_services_strict_isolation():
     """3. Shifokorlar va xizmatlarning tenantlar hamda filiallar bo'yicha qat'iy ajralishi"""
