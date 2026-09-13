@@ -1437,6 +1437,35 @@ async def create_appointment(appt: AppointmentModel):
                 detail=f"Tanlangan vaqt ({appt.time}) shifokorning tushlik tanaffusiga ({l_start} - {l_end}) to'g'ri keladi. Iltimos, boshqa vaqtni tanlang."
             )
 
+        # 1.3 ANTI-SPAM & FLOOD PROTECTION: ONE ACTIVE APPOINTMENT PER PATIENT (Phone & Telegram ID)
+        # Bolalar o'ynab yoki trollar takror-takror qabullarni to'ldirib tashlamasligi uchun (Klinika/Tenant doirasida)
+        clean_phone = "".join(c for c in (appt.phone or "") if c.isdigit())
+        user_tg_id = getattr(appt, "telegramUserId", None)
+        target_tenant = getattr(appt, "tenantId", "dentamed") or "dentamed"
+
+        for existing in db:
+            if existing.get("status") in ["cancelled", "completed"]:
+                continue
+
+            existing_tenant = existing.get("tenantId", "dentamed") or "dentamed"
+            if existing_tenant != target_tenant:
+                continue
+
+            existing_phone = "".join(c for c in (existing.get("phone") or "") if c.isdigit())
+            existing_tg_id = existing.get("telegramUserId")
+
+            is_same_phone = bool(clean_phone and len(clean_phone) >= 9 and existing_phone and clean_phone[-9:] == existing_phone[-9:])
+            is_same_tg = bool(user_tg_id and existing_tg_id and user_tg_id == existing_tg_id)
+
+            if is_same_phone or is_same_tg:
+                existing_time = existing.get("time", "")
+                existing_date = existing.get("date", "")
+                existing_pin = existing.get("pinCode", "")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Hurmatli bemor, sizda allaqachon faol qabulingiz mavjud ({existing_date} {existing_time}, PIN: {existing_pin}). Qabullarni to'ldirib tashlamaslik uchun yangi qabulga yozilishdan oldin avvalgisini yakunlang yoki bekor qiling."
+                )
+
         # 2. DOUBLE-BOOKING CHECK:
         # Same doctor, same date, same time, same clinic, and status != 'cancelled'
         for existing in db:

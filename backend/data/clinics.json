@@ -440,5 +440,73 @@
       "lng": 69.2797
     },
     "mapUrl": "https://maps.google.com/?q=41.3111,69.2797"
+  },
+  {
+    "id": "shifonurmed19-main",
+    "tenantId": "shifonurmed19",
+    "name": "Shifo Nur Chilonzor",
+    "isMain": true,
+    "address": "Toshkent shahar, Chilonzor 9-mavze",
+    "landmark": "Markaziy bino",
+    "phone": "+998 71 200-77-77",
+    "managerName": "Dr. Botir Qodirov",
+    "staffPin": "3026",
+    "workingHours": "08:00 - 20:00 (Har kuni)",
+    "location": {
+      "lat": 41.3111,
+      "lng": 69.2797
+    },
+    "mapUrl": "https://maps.google.com/?q=41.3111,69.2797"
+  },
+  {
+    "id": "shifonurmed20-main",
+    "tenantId": "shifonurmed20",
+    "name": "Shifo Nur Chilonzor",
+    "isMain": true,
+    "address": "Toshkent shahar, Chilonzor 9-mavze",
+    "landmark": "Markaziy bino",
+    "phone": "+998 71 200-77-77",
+    "managerName": "Dr. Botir Qodirov",
+    "staffPin": "3027",
+    "workingHours": "08:00 - 20:00 (Har kuni)",
+    "location": {
+      "lat": 41.3111,
+      "lng": 69.2797
+    },
+    "mapUrl": "https://maps.google.com/?q=41.3111,69.2797"
+  },
+  {
+    "id": "shifonurmed21-main",
+    "tenantId": "shifonurmed21",
+    "name": "Shifo Nur Chilonzor",
+    "isMain": true,
+    "address": "Toshkent shahar, Chilonzor 9-mavze",
+    "landmark": "Markaziy bino",
+    "phone": "+998 71 200-77-77",
+    "managerName": "Dr. Botir Qodirov",
+    "staffPin": "3028",
+    "workingHours": "08:00 - 20:00 (Har kuni)",
+    "location": {
+      "lat": 41.3111,
+      "lng": 69.2797
+    },
+    "mapUrl": "https://maps.google.com/?q=41.3111,69.2797"
+  },
+  {
+    "id": "shifonurmed22-main",
+    "tenantId": "shifonurmed22",
+    "name": "Shifo Nur Chilonzor",
+    "isMain": true,
+    "address": "Toshkent shahar, Chilonzor 9-mavze",
+    "landmark": "Markaziy bino",
+    "phone": "+998 71 200-77-77",
+    "managerName": "Dr. Botir Qodirov",
+    "staffPin": "3029",
+    "workingHours": "08:00 - 20:00 (Har kuni)",
+    "location": {
+      "lat": 41.3111,
+      "lng": 69.2797
+    },
+    "mapUrl": "https://maps.google.com/?q=41.3111,69.2797"
   }
 ]
