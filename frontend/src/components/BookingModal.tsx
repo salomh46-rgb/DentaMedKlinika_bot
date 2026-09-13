@@ -38,9 +38,10 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [busySlots, setBusySlots] = useState<string[]>([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState<boolean>(false);
   
-  // Date calculations: Start strictly from Tomorrow to prevent accidental 'today' booking
+  // Date calculations: Start with today (urgent triage) and upcoming days
   const formatDateISO = (d: Date) => d.toISOString().split('T')[0];
   const now = new Date();
+  const todayStr = formatDateISO(now);
 
   const tomorrow = new Date(now);
   tomorrow.setDate(now.getDate() + 1);
@@ -58,8 +59,17 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   day4.setDate(now.getDate() + 4);
   const day4Str = formatDateISO(day4);
 
-  const [selectedDate, setSelectedDate] = useState<string>(tomorrowStr);
+  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const [selectedTime, setSelectedTime] = useState<string>(TIME_SLOTS[2]); // '10:30'
+
+  // Dual-Track Department: Dental vs ENT/LOR
+  const [selectedDept, setSelectedDept] = useState<'stomatology' | 'lor'>(
+    preselectedService?.department || preselectedDoctor?.department || 'stomatology'
+  );
+
+  // Family / Child booking state (bypasses phone anti-spam quota on backend)
+  const [isFamilyBooking, setIsFamilyBooking] = useState<boolean>(false);
+  const [familyMemberName, setFamilyMemberName] = useState<string>('');
 
   // Fetch busy slots whenever doctor, date or clinicId changes
   useEffect(() => {
@@ -87,8 +97,6 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     };
   }, [doctor.id, selectedDate, selectedClinicId, isOpen]);
 
-
-
   const [patientName, setPatientName] = useState<string>(() => {
     const tg = window.Telegram?.WebApp?.initDataUnsafe?.user;
     if (tg?.first_name) {
@@ -101,13 +109,21 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
   const quickDates = [
     {
+      date: todayStr,
+      label: { uz: 'Bugun (Tezkor)', ru: 'Сегодня (Срочно)' },
+      weekday: {
+        uz: now.toLocaleDateString('uz-UZ', { weekday: 'short', month: 'numeric', day: 'numeric' }),
+        ru: now.toLocaleDateString('ru-RU', { weekday: 'short', month: 'numeric', day: 'numeric' })
+      },
+      isHot: true
+    },
+    {
       date: tomorrowStr,
       label: { uz: 'Ertaga', ru: 'Завтра' },
       weekday: {
         uz: tomorrow.toLocaleDateString('uz-UZ', { weekday: 'short', month: 'numeric', day: 'numeric' }),
         ru: tomorrow.toLocaleDateString('ru-RU', { weekday: 'short', month: 'numeric', day: 'numeric' })
-      },
-      isHot: true
+      }
     },
     {
       date: dayAfterStr,
@@ -177,7 +193,11 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     const newAppointment: Appointment = {
       id: 'MED-' + Math.floor(100000 + Math.random() * 900000),
       pinCode: randomPin,
-      patientName: patientName.trim(),
+      patientName: isFamilyBooking && familyMemberName.trim()
+        ? `${patientName.trim()} (${familyMemberName.trim()})`
+        : patientName.trim(),
+      familyMemberName: isFamilyBooking && familyMemberName.trim() ? familyMemberName.trim() : undefined,
+      department: selectedDept,
       phone: phone.trim(),
       doctor,
       service,
@@ -186,7 +206,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       status: 'confirmed',
       notes: complaint.trim(),
       createdAt: new Date().toISOString(),
-      selectedTeethNumbers: selectedTeethNumbers && selectedTeethNumbers.length > 0 ? selectedTeethNumbers : undefined,
+      selectedTeethNumbers: selectedDept === 'stomatology' && selectedTeethNumbers && selectedTeethNumbers.length > 0 ? selectedTeethNumbers : undefined,
       hasPromoUltrasonic: !!hasPromoUltrasonic,
       discountAmount: discountAmount || 0,
       totalAmount: totalPrice || service.price,
@@ -196,17 +216,31 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
     const apiPayload = {
       ...newAppointment,
+      familyMemberName: isFamilyBooking && familyMemberName.trim() ? familyMemberName.trim() : undefined,
+      department: selectedDept,
       telegramUserId: tgUser?.id || null,
       telegramUsername: tgUser?.username || null
     };
 
-    // Save to backend API and handle 409 Conflict
+    // Save to backend API and handle 409 & 400
     try {
       const res = await fetch('/api/appointments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(apiPayload)
       });
+
+      if (res.status === 400) {
+        setIsSubmitting(false);
+        const errJson = await res.json().catch(() => ({}));
+        showTelegramAlert(
+          errJson.detail ||
+          (lang === 'uz'
+            ? 'Hurmatli bemor, sizda allaqachon faol qabulingiz mavjud.'
+            : 'У вас уже есть активная запись.')
+        );
+        return;
+      }
 
       if (res.status === 409) {
         setIsSubmitting(false);
@@ -277,8 +311,48 @@ export const BookingModal: React.FC<BookingModalProps> = ({
           {/* STEP 1: Xizmat va Shifokor */}
           {step === 1 && (
             <div className="space-y-4">
-              {/* Selected Teeth & Cross-Promo notification banner */}
-              {selectedTeethNumbers && selectedTeethNumbers.length > 0 && (
+              {/* Dual-Track Department Selector: Dental vs LOR */}
+              <div className="grid grid-cols-2 gap-2 p-1 bg-[#FAF8F5] dark:bg-[#0E231B] rounded-2xl border border-[#E8E2D8] dark:border-[#C5A880]/20">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedDept('stomatology');
+                    const firstS = SERVICES.find(s => s.department === 'stomatology');
+                    const firstD = DOCTORS.find(d => d.department === 'stomatology');
+                    if (firstS) setService(firstS);
+                    if (firstD) setDoctor(firstD);
+                  }}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                    selectedDept === 'stomatology'
+                      ? 'bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] shadow-sm'
+                      : 'text-[#627068] dark:text-[#9FB1A7] hover:text-[#112E24]'
+                  }`}
+                >
+                  <span>🦷</span>
+                  <span>{lang === 'uz' ? 'Stomatologiya' : 'Стоматология'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedDept('lor');
+                    const firstS = SERVICES.find(s => s.department === 'lor');
+                    const firstD = DOCTORS.find(d => d.department === 'lor');
+                    if (firstS) setService(firstS);
+                    if (firstD) setDoctor(firstD);
+                  }}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                    selectedDept === 'lor'
+                      ? 'bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] shadow-sm'
+                      : 'text-[#627068] dark:text-[#9FB1A7] hover:text-[#112E24]'
+                  }`}
+                >
+                  <span>👂</span>
+                  <span>{lang === 'uz' ? 'LOR (Quloq, Burun)' : 'ЛОР (Ухо, Горло, Нос)'}</span>
+                </button>
+              </div>
+
+              {/* Selected Teeth & Cross-Promo notification banner (Only for Dental) */}
+              {selectedDept === 'stomatology' && selectedTeethNumbers && selectedTeethNumbers.length > 0 && (
                 <div className="bg-[#112E24]/5 dark:bg-[#183F32]/50 border border-[#C5A880]/40 rounded-2xl p-3 space-y-1.5 text-xs">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-[#112E24] dark:text-[#FAF8F5] flex items-center gap-1.5">
@@ -318,9 +392,9 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                   }}
                   className="w-full bg-[#FAF8F5] dark:bg-[#0E231B] border border-[#E8E2D8] dark:border-[#C5A880]/20 rounded-2xl p-2.5 text-xs font-medium text-[#1A221E] dark:text-[#FAF8F5] focus:ring-1 focus:ring-[#C5A880] focus:outline-none"
                 >
-                  {SERVICES.map(s => (
+                  {SERVICES.filter(s => s.department === selectedDept).map(s => (
                     <option key={s.id} value={s.id} className="bg-white dark:bg-[#0E231B] text-[#1A221E] dark:text-[#FAF8F5]">
-                      [{s.department === 'stomatology' ? 'Dental' : 'LOR'}] {lang === 'uz' ? s.title.uz : s.title.ru} — {s.price.toLocaleString('uz-UZ')} {lang === 'uz' ? 'so\'m' : 'сум'}
+                      {lang === 'uz' ? s.title.uz : s.title.ru} — {s.price.toLocaleString('uz-UZ')} {lang === 'uz' ? 'so\'m' : 'сум'}
                     </option>
                   ))}
                 </select>
@@ -331,7 +405,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                   {lang === 'uz' ? '2. Shifokorni tanlang:' : '2. Выберите врача:'}
                 </label>
                 <div className="grid gap-2">
-                  {DOCTORS.map(doc => {
+                  {DOCTORS.filter(d => d.department === selectedDept).map(doc => {
                     const isSelected = doctor.id === doc.id;
                     return (
                       <div
@@ -380,7 +454,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                     <span>{lang === 'uz' ? 'Qabul sanasini tanlang:' : 'Выберите дату приема:'}</span>
                   </label>
                   <span className="text-[9.5px] text-[#112E24] dark:text-[#C5A880] font-medium bg-[#112E24]/5 dark:bg-[#C5A880]/10 px-2 py-0.5 rounded-full border border-[#C5A880]/30">
-                    {lang === 'uz' ? 'Bugunga joylar to\'lgan' : 'На сегодня мест нет'}
+                    {lang === 'uz' ? '⚡ Tezkor onlayn qabul' : '⚡ Срочный прием'}
                   </span>
                 </div>
 
@@ -414,13 +488,13 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 <div className="relative">
                   <input
                     type="date"
-                    min={tomorrowStr}
+                    min={todayStr}
                     value={selectedDate}
                     onChange={e => {
-                      if (e.target.value >= tomorrowStr) {
+                      if (e.target.value >= todayStr) {
                         setSelectedDate(e.target.value);
                       } else {
-                        showTelegramAlert(lang === 'uz' ? 'Iltimos, ertangi kundan boshlab sana tanlang!' : 'Пожалуйста, выберите дату начиная с завтрашнего дня!');
+                        showTelegramAlert(lang === 'uz' ? 'Iltimos, bugungi kundan boshlab sana tanlang!' : 'Пожалуйста, выберите дату начиная с сегодняшнего дня!');
                       }
                     }}
                     className="w-full bg-[#FAF8F5] dark:bg-[#0E231B] border border-[#E8E2D8] dark:border-[#C5A880]/20 rounded-2xl p-2.5 text-xs font-medium text-[#1A221E] dark:text-[#FAF8F5] focus:ring-1 focus:ring-[#C5A880] focus:outline-none"
@@ -430,8 +504,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                   <span>ℹ️</span>
                   <span>
                     {lang === 'uz'
-                      ? 'Adashib ketmaslik uchun qabullar ertangi kundan boshlab rejalashtiriladi.'
-                      : 'Во избежание ошибок запись начинается со следующего дня.'}
+                      ? "Bugungi va kelgusi kunlardagi bo'sh vaqtlarga navbatsiz yozilishingiz mumkin."
+                      : 'Вы можете записаться на свободное время сегодня и на последующие дни.'}
                   </span>
                 </p>
               </div>
@@ -449,29 +523,27 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                   )}
                 </div>
 
-                <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
-                  {TIME_SLOTS.map(time => {
-                    const isBusy = busySlots.includes(time);
-                    const isSelected = selectedTime === time;
+                {/* Grid of Time Slots with Real-Time Busy Locks */}
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                  {TIME_SLOTS.map(t => {
+                    const isBusy = busySlots.includes(t);
+                    const isSelected = selectedTime === t;
 
                     return (
                       <button
-                        key={time}
+                        key={t}
                         type="button"
                         disabled={isBusy}
-                        onClick={() => {
-                          if (!isBusy) setSelectedTime(time);
-                        }}
-                        className={`py-2 px-1 rounded-xl text-xs font-semibold border transition flex flex-col items-center justify-center relative ${
+                        onClick={() => setSelectedTime(t)}
+                        className={`p-2 rounded-xl text-xs font-mono font-bold transition flex flex-col items-center justify-center relative ${
                           isBusy
-                            ? 'bg-rose-50/70 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/40 text-rose-400 dark:text-rose-400/80 cursor-not-allowed opacity-60'
+                            ? 'bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/40 text-rose-400 dark:text-rose-600 cursor-not-allowed opacity-60'
                             : isSelected
-                            ? 'bg-[#112E24] dark:bg-[#C5A880] border-[#112E24] dark:border-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] shadow-sm active:scale-95'
-                            : 'bg-[#FAF8F5] dark:bg-[#0E231B] border-[#E8E2D8] dark:border-[#C5A880]/20 text-[#1A221E] dark:text-[#FAF8F5] hover:border-[#C5A880] active:scale-95'
+                            ? 'bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] ring-2 ring-[#C5A880] shadow-sm scale-95'
+                            : 'bg-[#FAF8F5] dark:bg-[#0E231B] border border-[#E8E2D8] dark:border-[#C5A880]/20 text-[#1A221E] dark:text-[#FAF8F5] hover:border-[#C5A880]'
                         }`}
-                        title={isBusy ? (lang === 'uz' ? 'Ushbu vaqt band qilingan' : 'Время уже занято') : ''}
                       >
-                        <span className={isBusy ? 'line-through decoration-rose-400/70' : ''}>{time}</span>
+                        <span>{t}</span>
                         {isBusy ? (
                           <span className="text-[8px] font-bold text-rose-600 dark:text-rose-400 flex items-center gap-0.5 mt-0.5">
                             <Lock className="w-2.5 h-2.5 inline" /> {lang === 'uz' ? 'Band' : 'Занято'}
@@ -511,6 +583,28 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 />
               </div>
 
+              {/* Family / Child Booking Option */}
+              <div className="p-3 rounded-2xl border border-[#E8E2D8] dark:border-[#C5A880]/20 bg-[#FAF8F5] dark:bg-[#07130F] space-y-2">
+                <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-[#1A221E] dark:text-[#FAF8F5]">
+                  <input
+                    type="checkbox"
+                    checked={isFamilyBooking}
+                    onChange={e => setIsFamilyBooking(e.target.checked)}
+                    className="w-4 h-4 rounded text-[#C5A880] focus:ring-[#C5A880]"
+                  />
+                  <span>👶 {lang === 'uz' ? "Farzandim yoki oila a'zom uchun qabul olyapman" : 'Записываю ребенка или члена семьи'}</span>
+                </label>
+                {isFamilyBooking && (
+                  <input
+                    type="text"
+                    value={familyMemberName}
+                    onChange={e => setFamilyMemberName(e.target.value)}
+                    placeholder={lang === 'uz' ? "Bemor ismi va yoshi (masalan: Jasurbek, 7 yosh)" : "Имя и возраст (напр: Жасурбек, 7 лет)"}
+                    className="w-full bg-white dark:bg-[#0E231B] border border-[#C5A880]/40 rounded-xl p-2 text-xs font-medium text-[#1A221E] dark:text-[#FAF8F5] focus:ring-1 focus:ring-[#C5A880] focus:outline-none"
+                  />
+                )}
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-[#1A221E] dark:text-[#FAF8F5] mb-1 flex items-center gap-1">
                   <Phone className="w-3.5 h-3.5 text-[#C5A880]" />
@@ -537,6 +631,27 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                   className="w-full bg-[#FAF8F5] dark:bg-[#0E231B] border border-[#E8E2D8] dark:border-[#C5A880]/20 rounded-2xl p-2.5 text-xs text-[#1A221E] dark:text-[#FAF8F5] focus:ring-1 focus:ring-[#C5A880] focus:outline-none"
                 />
               </div>
+
+              {/* Quick ENT Symptoms Pills if LOR is selected */}
+              {selectedDept === 'lor' && (
+                <div>
+                  <label className="block text-[11px] font-bold text-[#627068] dark:text-[#9FB1A7] mb-1.5">
+                    {lang === 'uz' ? 'Tezkor LOR alomatlari (bosing):' : 'Быстрые ЛОР симптомы:'}
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['Tomoq og\'rig\'i', 'Burun bitishi', 'Quloq shang\'illashi', 'Gaymorit', 'Eshitish pasayishi', 'Bosh og\'rig\'i'].map(sym => (
+                      <button
+                        key={sym}
+                        type="button"
+                        onClick={() => setComplaint(prev => prev ? `${prev}, ${sym}` : sym)}
+                        className="px-2.5 py-1 rounded-lg bg-[#FAF8F5] dark:bg-[#07130F] border border-[#E8E2D8] dark:border-[#183F32] hover:border-[#C5A880] text-[10.5px] text-[#112E24] dark:text-[#FAF8F5] font-medium transition active:scale-95"
+                      >
+                        + {sym}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Order Summary Box */}
               <div className="bg-[#FAF8F5] dark:bg-[#0E231B] p-3.5 rounded-2xl border border-[#E8E2D8] dark:border-[#C5A880]/20 text-xs space-y-1.5">

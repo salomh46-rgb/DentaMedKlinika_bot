@@ -365,5 +365,61 @@
       "shifonurmed22-main"
     ],
     "createdAt": "2026-09-13T09:52:46.876830+05:00"
+  },
+  {
+    "id": "shifonurmed23",
+    "name": "Shifo Nur Med",
+    "ownerName": "Dr. Botir Qodirov",
+    "ownerPin": "34775",
+    "phone": "+998 71 200-77-77",
+    "email": "botir@shifonur.uz",
+    "logo": "/images/shifonurmed23_logo.png",
+    "status": "active",
+    "branchIds": [
+      "shifonurmed23-main"
+    ],
+    "createdAt": "2026-09-13T10:36:05.226379+05:00"
+  },
+  {
+    "id": "shifonurmed24",
+    "name": "Shifo Nur Med",
+    "ownerName": "Dr. Botir Qodirov",
+    "ownerPin": "35886",
+    "phone": "+998 71 200-77-77",
+    "email": "botir@shifonur.uz",
+    "logo": "/images/shifonurmed24_logo.png",
+    "status": "active",
+    "branchIds": [
+      "shifonurmed24-main"
+    ],
+    "createdAt": "2026-09-13T11:07:25.140918+05:00"
+  },
+  {
+    "id": "shifonurmed25",
+    "name": "Shifo Nur Med",
+    "ownerName": "Dr. Botir Qodirov",
+    "ownerPin": "36997",
+    "phone": "+998 71 200-77-77",
+    "email": "botir@shifonur.uz",
+    "logo": "/images/shifonurmed25_logo.png",
+    "status": "active",
+    "branchIds": [
+      "shifonurmed25-main"
+    ],
+    "createdAt": "2026-09-13T11:07:48.438364+05:00"
+  },
+  {
+    "id": "shifonurmed26",
+    "name": "Shifo Nur Med",
+    "ownerName": "Dr. Botir Qodirov",
+    "ownerPin": "38108",
+    "phone": "+998 71 200-77-77",
+    "email": "botir@shifonur.uz",
+    "logo": "/images/shifonurmed26_logo.png",
+    "status": "active",
+    "branchIds": [
+      "shifonurmed26-main"
+    ],
+    "createdAt": "2026-09-13T11:18:21.718706+05:00"
   }
 ]

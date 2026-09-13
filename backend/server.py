@@ -35,9 +35,12 @@ CLINICS_FILE = DATA_DIR / "clinics.json"
 PRESCRIPTIONS_FILE = DATA_DIR / "prescriptions.json"
 TENANTS_FILE = DATA_DIR / "tenants.json"
 DOCTOR_SCHEDULES_FILE = DATA_DIR / "doctor_schedules.json"
+SHIFTS_FILE = DATA_DIR / "shifts.json"
+EXPENSES_FILE = DATA_DIR / "expenses.json"
+DEBTS_FILE = DATA_DIR / "debts.json"
 
 # Ensure essential files exist
-for f_path in [DB_FILE, CLINICS_FILE, PRESCRIPTIONS_FILE, TENANTS_FILE, DOCTOR_SCHEDULES_FILE]:
+for f_path in [DB_FILE, CLINICS_FILE, PRESCRIPTIONS_FILE, TENANTS_FILE, DOCTOR_SCHEDULES_FILE, SHIFTS_FILE, EXPENSES_FILE, DEBTS_FILE]:
     if not f_path.exists():
         with open(f_path, "w", encoding="utf-8") as f:
             json.dump([], f, ensure_ascii=False, indent=2)
@@ -111,6 +114,8 @@ class AppointmentModel(BaseModel):
     time: str
     clinicId: str = "dentamed-nukus"
     tenantId: Optional[str] = "dentamed"
+    department: Optional[str] = "dental"
+    familyMemberName: Optional[str] = None
     status: str = "confirmed"
     notes: Optional[str] = ""
     createdAt: str
@@ -118,6 +123,9 @@ class AppointmentModel(BaseModel):
     hasPromoUltrasonic: Optional[bool] = False
     discountAmount: Optional[int] = 0
     totalAmount: Optional[int] = None
+    paidAmount: Optional[int] = None
+    debtAmount: Optional[int] = 0
+    paymentStatus: Optional[str] = "paid"
     telegramUserId: Optional[int] = None
     telegramUsername: Optional[str] = None
     reminder24hSent: Optional[bool] = False
@@ -136,6 +144,32 @@ class LeaveModel(BaseModel):
 class StaffLoginModel(BaseModel):
     pinCode: Optional[str] = None
     pin: Optional[str] = None
+
+class ShiftOpenModel(BaseModel):
+    clinicId: str
+    tenantId: str
+    cashierName: str
+    startingCash: int = 0
+    notes: Optional[str] = ""
+
+class ShiftExpenseModel(BaseModel):
+    clinicId: str
+    tenantId: str
+    category: str
+    amount: int
+    recipient: str
+    comment: Optional[str] = ""
+
+class ShiftCloseModel(BaseModel):
+    clinicId: str
+    tenantId: str
+    actualCash: int
+    notes: Optional[str] = ""
+
+class DebtPaymentModel(BaseModel):
+    amount: int
+    paymentMethod: Optional[str] = "cash"
+    notes: Optional[str] = ""
 
 class TenantRegisterModel(BaseModel):
     name: str
@@ -181,6 +215,10 @@ AppointmentModel.model_rebuild()
 StatusUpdateModel.model_rebuild()
 ScheduleUpdateModel.model_rebuild()
 LeaveModel.model_rebuild()
+ShiftOpenModel.model_rebuild()
+ShiftExpenseModel.model_rebuild()
+ShiftCloseModel.model_rebuild()
+DebtPaymentModel.model_rebuild()
 
 # SMS Xabarnoma Zaxira Shlyuzi (Eskiz.uz / SMS Gateway Helper & In-Memory Logs)
 SMS_SENT_LOGS: List[Dict[str, Any]] = []
@@ -1442,29 +1480,31 @@ async def create_appointment(appt: AppointmentModel):
         clean_phone = "".join(c for c in (appt.phone or "") if c.isdigit())
         user_tg_id = getattr(appt, "telegramUserId", None)
         target_tenant = getattr(appt, "tenantId", "dentamed") or "dentamed"
+        is_family_booking = bool(getattr(appt, "familyMemberName", None) and str(appt.familyMemberName).strip())
 
-        for existing in db:
-            if existing.get("status") in ["cancelled", "completed"]:
-                continue
+        if not is_family_booking:
+            for existing in db:
+                if existing.get("status") in ["cancelled", "completed"]:
+                    continue
 
-            existing_tenant = existing.get("tenantId", "dentamed") or "dentamed"
-            if existing_tenant != target_tenant:
-                continue
+                existing_tenant = existing.get("tenantId", "dentamed") or "dentamed"
+                if existing_tenant != target_tenant:
+                    continue
 
-            existing_phone = "".join(c for c in (existing.get("phone") or "") if c.isdigit())
-            existing_tg_id = existing.get("telegramUserId")
+                existing_phone = "".join(c for c in (existing.get("phone") or "") if c.isdigit())
+                existing_tg_id = existing.get("telegramUserId")
 
-            is_same_phone = bool(clean_phone and len(clean_phone) >= 9 and existing_phone and clean_phone[-9:] == existing_phone[-9:])
-            is_same_tg = bool(user_tg_id and existing_tg_id and user_tg_id == existing_tg_id)
+                is_same_phone = bool(clean_phone and len(clean_phone) >= 9 and existing_phone and clean_phone[-9:] == existing_phone[-9:])
+                is_same_tg = bool(user_tg_id and existing_tg_id and user_tg_id == existing_tg_id)
 
-            if is_same_phone or is_same_tg:
-                existing_time = existing.get("time", "")
-                existing_date = existing.get("date", "")
-                existing_pin = existing.get("pinCode", "")
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Hurmatli bemor, sizda allaqachon faol qabulingiz mavjud ({existing_date} {existing_time}, PIN: {existing_pin}). Qabullarni to'ldirib tashlamaslik uchun yangi qabulga yozilishdan oldin avvalgisini yakunlang yoki bekor qiling."
-                )
+                if is_same_phone or is_same_tg:
+                    existing_time = existing.get("time", "")
+                    existing_date = existing.get("date", "")
+                    existing_pin = existing.get("pinCode", "")
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Hurmatli bemor, sizda allaqachon faol qabulingiz mavjud ({existing_date} {existing_time}, PIN: {existing_pin}). Qabullarni to'ldirib tashlamaslik uchun yangi qabulga yozilishdan oldin avvalgisini yakunlang yoki bekor qiling."
+                    )
 
         # 2. DOUBLE-BOOKING CHECK:
         # Same doctor, same date, same time, same clinic, and status != 'cancelled'
@@ -1489,6 +1529,36 @@ async def create_appointment(appt: AppointmentModel):
         appt_dict = appt.model_dump() if hasattr(appt, "model_dump") else appt.dict()
         db.insert(0, appt_dict)
         save_db(db)
+
+        # Record debt in DEBTS_FILE if there is an outstanding debt balance
+        if getattr(appt, "debtAmount", 0) and appt.debtAmount > 0:
+            debts = load_json_file(DEBTS_FILE)
+            debt_record = {
+                "id": f"DEBT-{appt.id}",
+                "appointmentId": appt.id,
+                "pinCode": appt.pinCode,
+                "patientName": appt.patientName,
+                "phone": appt.phone,
+                "clinicId": appt.clinicId,
+                "tenantId": appt.tenantId or "dentamed",
+                "doctorName": appt.doctor.get("name", "Shifokor"),
+                "serviceName": appt.service.get("name", "Muolaja"),
+                "totalAmount": appt.totalAmount or ((appt.paidAmount or 0) + appt.debtAmount),
+                "paidAmount": appt.paidAmount or 0,
+                "debtAmount": appt.debtAmount,
+                "paymentStatus": "partial" if (appt.paidAmount or 0) > 0 else "unpaid",
+                "createdAt": datetime.now(TASHKENT_TZ).isoformat(),
+                "history": [
+                    {
+                        "amount": appt.paidAmount or 0,
+                        "date": datetime.now(TASHKENT_TZ).isoformat(),
+                        "method": appt.paymentMethod or "cash",
+                        "notes": "Qabul chog'ida qisman to'langan"
+                    }
+                ] if (appt.paidAmount or 0) > 0 else []
+            }
+            debts.insert(0, debt_record)
+            save_json_file(DEBTS_FILE, debts)
 
     # Notifications outside lock to keep critical section fast
     await notify_patient(appt)
@@ -1562,6 +1632,226 @@ async def create_prescription(pres: PrescriptionModel):
         "status": "success",
         "message": "Raqamli retsept muvaffaqiyatli saqlandi va Telegram orqali bemorga yuborildi",
         "prescription": pres_dict
+    }
+
+# 5. SHIFTS (Z-HISOBOT) & EXPENSES APIS
+@app.get("/api/shifts/current")
+def get_current_shift(clinicId: str = "dentamed-nukus", tenantId: str = "dentamed"):
+    shifts = load_json_file(SHIFTS_FILE)
+    current = next((s for s in shifts if s.get("clinicId") == clinicId and s.get("tenantId") == tenantId and s.get("status") == "open"), None)
+    if not current:
+        return {"hasActiveShift": False, "shift": None}
+    
+    # Calculate live revenue and expenses during this shift
+    db = load_db()
+    expenses = load_json_file(EXPENSES_FILE)
+    
+    opened_at = current.get("openedAt", "")
+    shift_appts = [
+        a for a in db 
+        if a.get("clinicId") == clinicId and a.get("tenantId") == tenantId 
+        and a.get("status") != "cancelled" 
+        and a.get("createdAt", "") >= opened_at
+    ]
+    shift_expenses = [
+        e for e in expenses
+        if e.get("clinicId") == clinicId and e.get("tenantId") == tenantId
+        and e.get("createdAt", "") >= opened_at
+    ]
+
+    total_revenue = sum(a.get("paidAmount") if a.get("paidAmount") is not None else (a.get("totalAmount") or a.get("service", {}).get("price") or 0) for a in shift_appts)
+    cash_revenue = sum(
+        (a.get("paidAmount") if a.get("paidAmount") is not None else (a.get("totalAmount") or a.get("service", {}).get("price") or 0))
+        for a in shift_appts if a.get("paymentMethod") == "cash"
+    )
+    card_revenue = sum(
+        (a.get("paidAmount") if a.get("paidAmount") is not None else (a.get("totalAmount") or a.get("service", {}).get("price") or 0))
+        for a in shift_appts if a.get("paymentMethod") in ["card", "terminal"]
+    )
+    online_revenue = sum(
+        (a.get("paidAmount") if a.get("paidAmount") is not None else (a.get("totalAmount") or a.get("service", {}).get("price") or 0))
+        for a in shift_appts if a.get("paymentMethod") in ["click", "payme"]
+    )
+    total_expense = sum(e.get("amount", 0) for e in shift_expenses)
+    starting_cash = current.get("startingCash", 0)
+    expected_cash = starting_cash + cash_revenue - total_expense
+
+    return {
+        "hasActiveShift": True,
+        "shift": current,
+        "liveStats": {
+            "appointmentsCount": len(shift_appts),
+            "totalRevenue": total_revenue,
+            "cashRevenue": cash_revenue,
+            "cardRevenue": card_revenue,
+            "onlineRevenue": online_revenue,
+            "totalExpense": total_expense,
+            "startingCash": starting_cash,
+            "expectedCash": expected_cash,
+            "expenses": shift_expenses
+        }
+    }
+
+@app.post("/api/shifts/open")
+def open_shift(payload: ShiftOpenModel):
+    shifts = load_json_file(SHIFTS_FILE)
+    existing = next((s for s in shifts if s.get("clinicId") == payload.clinicId and s.get("tenantId") == payload.tenantId and s.get("status") == "open"), None)
+    if existing:
+        return {"status": "already_open", "shift": existing}
+
+    shift_id = f"SHIFT-{int(datetime.now().timestamp())}"
+    new_shift = {
+        "id": shift_id,
+        "clinicId": payload.clinicId,
+        "tenantId": payload.tenantId,
+        "cashierName": payload.cashierName,
+        "startingCash": payload.startingCash,
+        "openedAt": datetime.now(TASHKENT_TZ).isoformat(),
+        "status": "open",
+        "notes": payload.notes or ""
+    }
+    shifts.insert(0, new_shift)
+    save_json_file(SHIFTS_FILE, shifts)
+    return {"status": "success", "shift": new_shift}
+
+@app.post("/api/shifts/expense")
+def add_shift_expense(payload: ShiftExpenseModel):
+    expenses = load_json_file(EXPENSES_FILE)
+    expense_id = f"EXP-{int(datetime.now().timestamp())}"
+    new_expense = {
+        "id": expense_id,
+        "clinicId": payload.clinicId,
+        "tenantId": payload.tenantId,
+        "category": payload.category,
+        "amount": payload.amount,
+        "recipient": payload.recipient,
+        "comment": payload.comment or "",
+        "createdAt": datetime.now(TASHKENT_TZ).isoformat()
+    }
+    expenses.insert(0, new_expense)
+    save_json_file(EXPENSES_FILE, expenses)
+    return {"status": "success", "expense": new_expense}
+
+@app.post("/api/shifts/close")
+def close_shift(payload: ShiftCloseModel):
+    shifts = load_json_file(SHIFTS_FILE)
+    idx = next((i for i, s in enumerate(shifts) if s.get("clinicId") == payload.clinicId and s.get("tenantId") == payload.tenantId and s.get("status") == "open"), None)
+    if idx is None:
+        raise HTTPException(status_code=400, detail="Hozirda yopish uchun faol smena mavjud emas")
+
+    current = shifts[idx]
+    opened_at = current.get("openedAt", "")
+    closed_at = datetime.now(TASHKENT_TZ).isoformat()
+
+    db = load_db()
+    expenses = load_json_file(EXPENSES_FILE)
+    shift_appts = [
+        a for a in db 
+        if a.get("clinicId") == payload.clinicId and a.get("tenantId") == payload.tenantId 
+        and a.get("status") != "cancelled" 
+        and a.get("createdAt", "") >= opened_at
+    ]
+    shift_expenses = [
+        e for e in expenses
+        if e.get("clinicId") == payload.clinicId and e.get("tenantId") == payload.tenantId
+        and e.get("createdAt", "") >= opened_at
+    ]
+
+    total_revenue = sum(a.get("paidAmount") if a.get("paidAmount") is not None else (a.get("totalAmount") or a.get("service", {}).get("price") or 0) for a in shift_appts)
+    cash_revenue = sum(
+        (a.get("paidAmount") if a.get("paidAmount") is not None else (a.get("totalAmount") or a.get("service", {}).get("price") or 0))
+        for a in shift_appts if a.get("paymentMethod") == "cash"
+    )
+    card_revenue = sum(
+        (a.get("paidAmount") if a.get("paidAmount") is not None else (a.get("totalAmount") or a.get("service", {}).get("price") or 0))
+        for a in shift_appts if a.get("paymentMethod") in ["card", "terminal"]
+    )
+    online_revenue = sum(
+        (a.get("paidAmount") if a.get("paidAmount") is not None else (a.get("totalAmount") or a.get("service", {}).get("price") or 0))
+        for a in shift_appts if a.get("paymentMethod") in ["click", "payme"]
+    )
+    total_expense = sum(e.get("amount", 0) for e in shift_expenses)
+    starting_cash = current.get("startingCash", 0)
+    expected_cash = starting_cash + cash_revenue - total_expense
+    actual_cash = payload.actualCash
+    difference = actual_cash - expected_cash # 0 = exact match, positive = surplus, negative = deficit
+
+    current.update({
+        "status": "closed",
+        "closedAt": closed_at,
+        "actualCash": actual_cash,
+        "expectedCash": expected_cash,
+        "difference": difference,
+        "totalRevenue": total_revenue,
+        "cashRevenue": cash_revenue,
+        "cardRevenue": card_revenue,
+        "onlineRevenue": online_revenue,
+        "totalExpense": total_expense,
+        "appointmentsCount": len(shift_appts),
+        "notes": payload.notes or current.get("notes", "")
+    })
+    shifts[idx] = current
+    save_json_file(SHIFTS_FILE, shifts)
+
+    return {
+        "status": "success",
+        "message": "Smena muvaffaqiyatli yopildi va Z-Hisobot shakllantirildi",
+        "shift": current
+    }
+
+# 6. NASIYA (DEBTS LEDGER) APIS
+@app.get("/api/debts")
+def list_debts(clinicId: Optional[str] = None, tenantId: Optional[str] = None):
+    debts = load_json_file(DEBTS_FILE)
+    result = debts
+    if tenantId:
+        result = [d for d in result if d.get("tenantId") == tenantId]
+    if clinicId:
+        result = [d for d in result if d.get("clinicId") == clinicId]
+    return result
+
+@app.post("/api/debts/{appointment_id}/pay")
+def pay_debt(appointment_id: str, payload: DebtPaymentModel):
+    debts = load_json_file(DEBTS_FILE)
+    idx = next((i for i, d in enumerate(debts) if d.get("appointmentId") == appointment_id), None)
+    if idx is None:
+        raise HTTPException(status_code=404, detail="Nasiya qaydi topilmadi")
+
+    record = debts[idx]
+    current_debt = record.get("debtAmount", 0)
+    if payload.amount <= 0:
+        raise HTTPException(status_code=400, detail="To'lov summasi musbat bo'lishi kerak")
+
+    actual_pay = min(payload.amount, current_debt)
+    record["paidAmount"] = (record.get("paidAmount") or 0) + actual_pay
+    record["debtAmount"] = max(0, current_debt - actual_pay)
+    record["paymentStatus"] = "paid" if record["debtAmount"] == 0 else "partial"
+
+    if "history" not in record:
+        record["history"] = []
+    record["history"].append({
+        "amount": actual_pay,
+        "date": datetime.now(TASHKENT_TZ).isoformat(),
+        "method": payload.paymentMethod or "cash",
+        "notes": payload.notes or "Nasiya so'ndirish"
+    })
+    debts[idx] = record
+    save_json_file(DEBTS_FILE, debts)
+
+    # Sync with appointment in db
+    db = load_db()
+    for appt in db:
+        if appt.get("id") == appointment_id:
+            appt["paidAmount"] = record["paidAmount"]
+            appt["debtAmount"] = record["debtAmount"]
+            appt["paymentStatus"] = record["paymentStatus"]
+            save_db(db)
+            break
+
+    return {
+        "status": "success",
+        "message": f"{actual_pay:,} so'm to'lov qabul qilindi. Qoldiq nasiya: {record['debtAmount']:,} so'm",
+        "debt": record
     }
 
 if __name__ == "__main__":

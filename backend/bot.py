@@ -47,7 +47,10 @@ def get_main_keyboard(webapp_url: str) -> ReplyKeyboardMarkup:
                 )
             ],
             [
-                KeyboardButton(text="📍 Lokatsiya & Manzil"),
+                KeyboardButton(text="📋 Mening Qabullarim"),
+                KeyboardButton(text="📍 Lokatsiya & Manzil")
+            ],
+            [
                 KeyboardButton(text="📞 24/7 Konsultatsiya")
             ]
         ],
@@ -100,6 +103,65 @@ async def cmd_start(message: types.Message):
         parse_mode=ParseMode.HTML,
         reply_markup=get_inline_menu(WEBAPP_URL)
     )
+
+@dp.message(F.text == "📋 Mening Qabullarim")
+@dp.message(Command("my_appointments"))
+async def handle_my_appointments(message: types.Message):
+    user_id = message.from_user.id
+    db_file = Path(__file__).parent / "data" / "appointments.json"
+    appts = []
+    if db_file.exists():
+        try:
+            with open(db_file, "r", encoding="utf-8") as f:
+                all_appts = json.load(f)
+                appts = [
+                    a for a in all_appts
+                    if a.get("telegramUserId") == user_id and a.get("status") not in ["cancelled", "completed"]
+                ]
+        except Exception as e:
+            logging.error(f"Error loading appointments: {e}")
+            appts = []
+
+    if not appts:
+        empty_text = (
+            "📋 <b>Sizda hozirda faol qabullar mavjud emas.</b>\n\n"
+            "Yangi qabulga yozilish uchun pastdagi <b>«🦷 Qabulga Yozilish»</b> tugmasini bosing."
+        )
+        await message.answer(empty_text, parse_mode=ParseMode.HTML)
+        return
+
+    await message.answer(f"📋 <b>Sizning faol qabullaringiz ({len(appts)} ta):</b>", parse_mode=ParseMode.HTML)
+
+    for a in appts:
+        appt_id = a.get("id", "MED-000")
+        pin = a.get("pinCode", "0000")
+        doc_name = a.get("doctor", {}).get("name", "Shifokor")
+        srv_title = a.get("service", {}).get("title", {}).get("uz", "Tibbiy xizmat")
+        date = a.get("date", "")
+        time = a.get("time", "")
+        clinic_id = a.get("clinicId", "dentamed-nukus")
+        clinic_label = "DentaMed Nukus Bosh filiali" if "nukus" in clinic_id else "DentaMed Chilonzor filiali"
+
+        card = (
+            f"🎫 <b>QABUL TALONI:</b> <code>#{appt_id}</code>\n"
+            f"────────────────────────\n"
+            f"🔑 <b>Retsepshnda aytiladigan kod:</b> <code>{pin}</code>\n"
+            f"👨‍⚕️ <b>Shifokor:</b> {doc_name}\n"
+            f"🦷 <b>Xizmat:</b> {srv_title}\n"
+            f"📅 <b>Sana & Vaqt:</b> {date} soat {time}\n"
+            f"🏥 <b>Filial:</b> {clinic_label}\n"
+            f"────────────────────────\n"
+            f"ℹ️ <i>Klinikaga kelganingizda retsepshn xodimiga <b>{pin}</b> kodini aytsangiz, sizni navbatsiz shifokor xonasiga yo'naltirishadi.</i>"
+        )
+        action_kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="❌ Qabulni Bekor Qilish", callback_data=f"rem_cancel_{appt_id}"),
+                    InlineKeyboardButton(text="🔄 Vaqtni Ko'chirish", callback_data=f"rem_resched_{appt_id}")
+                ]
+            ]
+        )
+        await message.answer(card, parse_mode=ParseMode.HTML, reply_markup=action_kb)
 
 @dp.message(F.text == "📍 Lokatsiya & Manzil")
 async def handle_location(message: types.Message):

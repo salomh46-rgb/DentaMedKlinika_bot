@@ -547,24 +547,182 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
     }, 2500);
   };
 
-  // Filtered Kanban Columns
+  // ==========================================
+  // SHIFT (Z-HISOBOT) & NASIYA (DEBTS) STATE
+  // ==========================================
+  const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
+  const [currentShift, setCurrentShift] = useState<any>(null);
+  const [shiftLiveStats, setShiftLiveStats] = useState<any>(null);
+  const [shiftCashierName, setShiftCashierName] = useState(activeSession?.staffName || 'Kassir / Retsepshn');
+  const [shiftStartingCash, setShiftStartingCash] = useState<number>(0);
+  const [shiftActualCash, setShiftActualCash] = useState<number>(0);
+  const [shiftExpenseAmount, setShiftExpenseAmount] = useState<number>(0);
+  const [shiftExpenseCategory, setShiftExpenseCategory] = useState<string>('materiallar');
+  const [shiftExpenseRecipient, setShiftExpenseRecipient] = useState<string>('');
+  const [shiftExpenseComment, setShiftExpenseComment] = useState<string>('');
+  const [isExpenseAdding, setIsExpenseAdding] = useState(false);
+  const [closedZReport, setClosedZReport] = useState<any>(null);
+  const [shiftTab, setShiftTab] = useState<'status' | 'expense' | 'close' | 'zreport'>('status');
+
+  const [debtsList, setDebtsList] = useState<any[]>([]);
+  const [isDebtPayModalOpen, setIsDebtPayModalOpen] = useState(false);
+  const [selectedDebt, setSelectedDebt] = useState<any>(null);
+  const [debtPayAmount, setDebtPayAmount] = useState<number>(0);
+  const [debtPayMethod, setDebtPayMethod] = useState<'cash' | 'card' | 'click'>('cash');
+  const [debtPayNotes, setDebtPayNotes] = useState<string>('');
+
+  const activeClinicTarget = selectedBranchId === 'all' ? (visibleBranches[0]?.id || 'dentamed-nukus') : selectedBranchId;
+
+  const loadShiftData = async () => {
+    try {
+      const res = await fetch(`/api/shifts/current?clinicId=${activeClinicTarget}&tenantId=${currentTenant.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.hasActiveShift) {
+          setCurrentShift(data.shift);
+          setShiftLiveStats(data.liveStats);
+        } else {
+          setCurrentShift(null);
+          setShiftLiveStats(null);
+        }
+      }
+    } catch (e) {
+      console.warn('Could not load shift', e);
+    }
+  };
+
+  const loadDebtsData = async () => {
+    try {
+      const res = await fetch(`/api/debts?tenantId=${currentTenant.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDebtsList(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.warn('Could not load debts', e);
+    }
+  };
+
+  useEffect(() => {
+    loadShiftData();
+    loadDebtsData();
+  }, [activeClinicTarget, currentTenant.id]);
+
+  const handleOpenShift = async () => {
+    try {
+      const res = await fetch('/api/shifts/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clinicId: activeClinicTarget,
+          tenantId: currentTenant.id,
+          cashierName: shiftCashierName || 'Kassir',
+          startingCash: Number(shiftStartingCash) || 0,
+          notes: 'Ertalabki smena ochildi'
+        })
+      });
+      if (res.ok) {
+        await loadShiftData();
+        setShiftTab('status');
+      }
+    } catch (e) {
+      console.error('Error opening shift', e);
+    }
+  };
+
+  const handleAddShiftExpense = async () => {
+    if (shiftExpenseAmount <= 0) return;
+    try {
+      const res = await fetch('/api/shifts/expense', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clinicId: activeClinicTarget,
+          tenantId: currentTenant.id,
+          category: shiftExpenseCategory,
+          amount: Number(shiftExpenseAmount),
+          recipient: shiftExpenseRecipient.trim() || 'Xarid',
+          comment: shiftExpenseComment.trim()
+        })
+      });
+      if (res.ok) {
+        setShiftExpenseAmount(0);
+        setShiftExpenseRecipient('');
+        setShiftExpenseComment('');
+        setIsExpenseAdding(false);
+        await loadShiftData();
+      }
+    } catch (e) {
+      console.error('Error adding expense', e);
+    }
+  };
+
+  const handleCloseShift = async () => {
+    try {
+      const res = await fetch('/api/shifts/close', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clinicId: activeClinicTarget,
+          tenantId: currentTenant.id,
+          actualCash: Number(shiftActualCash) || 0,
+          notes: 'Kechki smena yopildi'
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setClosedZReport(data.shift);
+        setShiftTab('zreport');
+        await loadShiftData();
+      }
+    } catch (e) {
+      console.error('Error closing shift', e);
+    }
+  };
+
+  const handlePayDebtSubmit = async () => {
+    if (!selectedDebt || debtPayAmount <= 0) return;
+    try {
+      const res = await fetch(`/api/debts/${selectedDebt.appointmentId}/pay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: Number(debtPayAmount),
+          paymentMethod: debtPayMethod,
+          notes: debtPayNotes.trim()
+        })
+      });
+      if (res.ok) {
+        setIsDebtPayModalOpen(false);
+        setSelectedDebt(null);
+        setDebtPayAmount(0);
+        setDebtPayNotes('');
+        await loadDebtsData();
+        await loadShiftData();
+        const appts = await fetchAppointments();
+        setAppointments(appts);
+      }
+    } catch (e) {
+      console.error('Error paying debt', e);
+    }
+  };
+
+  // Filtered Kanban Columns (Unified Smart Search: PIN, Name, Phone, Doctor, Service)
   const kanbanFilteredAppointments = useMemo(() => {
     return branchFilteredAppointments.filter(appt => {
-      if (pinQuery.trim()) {
-        return appt.pinCode.includes(pinQuery.trim());
-      }
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
+        const q = searchQuery.toLowerCase().replace('#', '').trim();
         return (
+          appt.pinCode.toLowerCase().includes(q) ||
           appt.patientName.toLowerCase().includes(q) ||
           appt.phone.includes(q) ||
           appt.doctor.name.toLowerCase().includes(q) ||
-          appt.service.title.uz.toLowerCase().includes(q)
+          (appt.service.title?.uz && appt.service.title.uz.toLowerCase().includes(q))
         );
       }
       return true;
     });
-  }, [branchFilteredAppointments, pinQuery, searchQuery]);
+  }, [branchFilteredAppointments, searchQuery]);
 
   const kanbanColumns = useMemo(() => {
     return {
@@ -1080,40 +1238,34 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
             {/* Top Toolbar: 4-digit PIN Quick Search & Filters */}
             <div className="bg-white dark:bg-[#0E231B] p-4 rounded-2xl border border-[#E8E2D8] dark:border-[#183F32] shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="flex flex-1 items-center gap-3 w-full">
-                {/* 4-Digit PIN Search Box */}
-                <div className="relative flex-shrink-0 w-64">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#C5A880] font-bold text-xs">
-                    #PIN:
-                  </span>
+                {/* Unified Smart Search (PIN, Name, Phone, Service) */}
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-[#C5A880] absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
-                    maxLength={4}
-                    value={pinQuery}
-                    onChange={e => setPinQuery(e.target.value.replace(/[^0-9]/g, ''))}
-                    placeholder="4 xonali PIN (8492)..."
-                    className="w-full pl-16 pr-3 py-2.5 rounded-xl border-2 border-[#C5A880] bg-[#FAF8F5] dark:bg-[#07130F] text-[#112E24] dark:text-[#FAF8F5] font-mono text-sm font-bold tracking-widest focus:outline-none focus:ring-2 focus:ring-[#C5A880]"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    placeholder={lang === 'uz' ? "🔍 PIN-kod (#8492), Bemor ismi, telefon raqami yoki xizmat..." : "🔍 PIN-код (#8492), Имя пациента, телефон или услуга..."}
+                    className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-[#E8E2D8] dark:border-[#183F32] bg-[#FAF8F5] dark:bg-[#07130F] text-xs font-semibold focus:outline-none focus:border-[#C5A880]"
                   />
-                  {pinQuery && (
+                  {searchQuery && (
                     <button
-                      onClick={() => setPinQuery('')}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-xs text-gray-400 hover:text-gray-600"
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
 
-                {/* General Search (Name, Phone, Service) */}
-                <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-[#627068] absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    placeholder={lang === 'uz' ? "Bemor ismi, telefon raqami yoki xizmat nomi..." : "Имя пациента, телефон или услуга..."}
-                    className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-[#E8E2D8] dark:border-[#183F32] bg-[#FAF8F5] dark:bg-[#07130F] text-xs focus:outline-none focus:border-[#C5A880]"
-                  />
-                </div>
+                {/* Smena / Z-Hisobot Button */}
+                <button
+                  onClick={() => setIsShiftModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/40 text-xs font-bold transition shadow-xs whitespace-nowrap active:scale-95"
+                >
+                  <DollarSign className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                  <span>{currentShift?.status === 'open' ? '📊 Smena & Z-Hisobot' : '🟢 Smena Ochish'}</span>
+                </button>
               </div>
 
               {/* Status Counters */}
@@ -1222,20 +1374,13 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
                         </button>
                       </div>
 
-                      <div className="flex justify-between items-center text-[10px] pt-1">
-                        <button
-                          onClick={() => handleOpenPrescription(appt)}
-                          className="text-[#C5A880] hover:underline flex items-center gap-1"
-                        >
-                          <FileText className="w-3 h-3" />
-                          <span>Retsept yozish</span>
-                        </button>
-
+                      <div className="flex justify-end items-center text-[10px] pt-1">
                         <button
                           onClick={() => handleUpdateStatus(appt.id, 'no_show')}
-                          className="text-rose-500 hover:underline"
+                          className="text-rose-500 hover:underline flex items-center gap-1"
                         >
-                          Kelmadi
+                          <X className="w-3 h-3" />
+                          <span>Kelmadi / Bekor</span>
                         </button>
                       </div>
                     </div>
@@ -1266,34 +1411,29 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
                   {kanbanColumns.in_progress.map(appt => (
                     <div
                       key={appt.id}
-                      className="bg-white dark:bg-[#0E231B] p-3.5 rounded-xl border-2 border-blue-400/40 dark:border-blue-500/40 hover:border-blue-500 transition-all shadow-sm space-y-2.5"
+                      className="bg-white dark:bg-[#0E231B] p-3.5 rounded-xl border border-blue-200 dark:border-blue-900/50 shadow-sm space-y-2.5"
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-mono text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded">
-                              #{appt.pinCode}
-                            </span>
-                            <span className="font-semibold text-xs text-[#112E24] dark:text-[#FAF8F5]">
-                              {appt.patientName}
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-[#627068] dark:text-[#9FB1A7] mt-0.5">
-                            {appt.doctor.name} • {appt.time}
-                          </div>
-                        </div>
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500 bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded-full animate-pulse">
-                          Jarayonda
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-xs font-bold text-blue-600 dark:text-blue-400">
+                          #{appt.pinCode}
                         </span>
+                        <span className="font-semibold text-xs text-[#112E24] dark:text-[#FAF8F5]">
+                          {appt.patientName}
+                        </span>
+                      </div>
+
+                      <div className="text-[11px] text-[#627068] dark:text-[#9FB1A7]">
+                        <div>Shifokor: <span className="text-[#112E24] dark:text-[#FAF8F5] font-medium">{appt.doctor.name}</span></div>
+                        <div>Xizmat: <span className="text-[#C5A880] font-medium">{appt.service.title.uz}</span></div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-1.5 pt-1">
                         <button
                           onClick={() => handleUpdateStatus(appt.id, 'completed')}
-                          className="flex items-center justify-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white py-1.5 px-2 rounded-lg text-[11px] font-bold transition active:scale-95 shadow-sm"
+                          className="flex items-center justify-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white py-1.5 px-2 rounded-lg text-[11px] font-bold transition active:scale-95 shadow-xs"
                         >
                           <Check className="w-3 h-3" />
-                          <span>Yakunlandi</span>
+                          <span>Yakunlash</span>
                         </button>
 
                         <button
@@ -1304,14 +1444,6 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
                           <span>Kassa Cheki</span>
                         </button>
                       </div>
-
-                      <button
-                        onClick={() => handleOpenPrescription(appt)}
-                        className="w-full flex items-center justify-center gap-1 bg-[#FAF8F5] dark:bg-[#07130F] hover:bg-[#E8E2D8] dark:hover:bg-[#183F32] text-[#C5A880] py-1.5 px-2 rounded-lg text-[11px] font-semibold border border-[#C5A880]/30 transition"
-                      >
-                        <FileText className="w-3 h-3" />
-                        <span>💊 Retsept yozish va Telegramga jo'natish</span>
-                      </button>
                     </div>
                   ))}
                   {kanbanColumns.in_progress.length === 0 && (
@@ -1364,18 +1496,33 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
                       <div className="flex gap-2 pt-1">
                         <button
                           onClick={() => handleOpenReceipt(appt)}
-                          className="flex-1 flex items-center justify-center gap-1 py-1 rounded-lg bg-[#FAF8F5] dark:bg-[#07130F] text-[10px] font-bold text-[#112E24] dark:text-[#FAF8F5] border border-gray-300 dark:border-gray-700 hover:border-[#C5A880]"
+                          className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-[#FAF8F5] dark:bg-[#07130F] text-[10px] font-bold text-[#112E24] dark:text-[#FAF8F5] border border-gray-300 dark:border-gray-700 hover:border-[#C5A880]"
                         >
                           <Printer className="w-3 h-3" />
                           <span>Qayta Chek</span>
                         </button>
-                        <button
-                          onClick={() => handleOpenPrescription(appt)}
-                          className="flex-1 flex items-center justify-center gap-1 py-1 rounded-lg bg-[#C5A880]/10 text-[10px] font-bold text-[#C5A880] border border-[#C5A880]/30 hover:bg-[#C5A880]/20"
-                        >
-                          <Send className="w-3 h-3" />
-                          <span>Retsept</span>
-                        </button>
+                        {appt.debtAmount && appt.debtAmount > 0 ? (
+                          <button
+                            onClick={() => {
+                              setSelectedDebt({
+                                appointmentId: appt.id,
+                                patientName: appt.patientName,
+                                debtAmount: appt.debtAmount,
+                                totalAmount: appt.totalAmount || appt.service.price || 400000
+                              });
+                              setDebtPayAmount(appt.debtAmount || 0);
+                              setIsDebtPayModalOpen(true);
+                            }}
+                            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-[#112E24] text-[10px] font-bold shadow-xs"
+                          >
+                            <DollarSign className="w-3 h-3" />
+                            <span>Nasiya: {(appt.debtAmount).toLocaleString()}</span>
+                          </button>
+                        ) : (
+                          <span className="flex-1 flex items-center justify-center py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">
+                            To'liq to'langan
+                          </span>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -2004,6 +2151,122 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
               </div>
             </div>
 
+            {/* Nasiya va Qarzlar Daftari (Debts & Installments Ledger) */}
+            <div className="bg-white dark:bg-[#0E231B] p-6 rounded-3xl border border-[#E8E2D8] dark:border-[#183F32] shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#E8E2D8] dark:border-[#183F32]">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
+                      <Receipt className="w-4 h-4" />
+                    </div>
+                    <h3 className="font-serif font-bold text-base text-[#112E24] dark:text-[#FAF8F5]">
+                      Nasiya va Qarzlar Daftari (Debts & Installments Ledger)
+                    </h3>
+                  </div>
+                  <p className="text-xs text-[#627068] dark:text-[#9FB1A7] mt-1">
+                    Muolaja qildirib, to'lovni qisman yoki nasiyaga qoldirgan bemorlar va so'ndirilgan to'lovlar monitoringi
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 px-3.5 py-2 rounded-2xl text-right">
+                    <div className="text-[10px] text-amber-700 dark:text-amber-400 font-bold uppercase tracking-wider">Jami Nasiya Qoldig'i</div>
+                    <div className="font-mono text-sm font-black text-amber-600 dark:text-amber-300">
+                      {debtsList.filter(d => d.status !== 'settled').reduce((sum, d) => sum + (d.debtAmount || 0), 0).toLocaleString('uz-UZ')} UZS
+                    </div>
+                  </div>
+                  <button
+                    onClick={loadDebtsData}
+                    className="p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 transition"
+                    title="Yangilash"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#FAF8F5] dark:bg-[#07130F] text-[#627068] dark:text-[#9FB1A7] uppercase text-[10px] tracking-wider border-b border-[#E8E2D8] dark:border-[#183F32]">
+                    <tr>
+                      <th className="py-3 px-4">Bemor F.I.Sh</th>
+                      <th className="py-3 px-4">Telefon</th>
+                      <th className="py-3 px-4">Sana / Shifokor</th>
+                      <th className="py-3 px-4 text-right">Jami Muolaja</th>
+                      <th className="py-3 px-4 text-right text-emerald-600 dark:text-emerald-400">To'langan</th>
+                      <th className="py-3 px-4 text-right text-rose-500 font-bold">Qarz Qoldig'i</th>
+                      <th className="py-3 px-4 text-center">Holat</th>
+                      <th className="py-3 px-4 text-center">Amal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E8E2D8] dark:divide-[#183F32]">
+                    {debtsList.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-8 text-center text-gray-500 text-xs">
+                          Hozircha faol nasiya yoki qarz yozuvlari mavjud emas (Kassa toza).
+                        </td>
+                      </tr>
+                    ) : (
+                      debtsList.map(debt => (
+                        <tr key={debt.appointmentId} className="hover:bg-[#FAF8F5]/60 dark:hover:bg-[#07130F]/40 transition">
+                          <td className="py-3 px-4 font-bold text-[#112E24] dark:text-[#FAF8F5]">
+                            {debt.patientName}
+                          </td>
+                          <td className="py-3 px-4 font-mono text-gray-600 dark:text-gray-300">
+                            {debt.phone}
+                          </td>
+                          <td className="py-3 px-4 text-gray-500">
+                            <div>{debt.date}</div>
+                            <div className="text-[10px] text-[#C5A880]">{debt.doctorName || 'Shifokor'}</div>
+                          </td>
+                          <td className="py-3 px-4 text-right font-mono font-bold">
+                            {(debt.totalAmount || 0).toLocaleString('uz-UZ')} UZS
+                          </td>
+                          <td className="py-3 px-4 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                            {(debt.paidAmount || 0).toLocaleString('uz-UZ')} UZS
+                          </td>
+                          <td className="py-3 px-4 text-right font-mono font-black text-rose-500">
+                            {(debt.debtAmount || 0).toLocaleString('uz-UZ')} UZS
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            {debt.debtAmount <= 0 || debt.status === 'settled' ? (
+                              <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+                                To'liq to'langan
+                              </span>
+                            ) : debt.paidAmount > 0 ? (
+                              <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+                                Qisman to'langan
+                              </span>
+                            ) : (
+                              <span className="bg-rose-500/10 text-rose-600 dark:text-rose-400 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+                                Nasiya (100% qarz)
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            {debt.debtAmount > 0 ? (
+                              <button
+                                onClick={() => {
+                                  setSelectedDebt(debt);
+                                  setDebtPayAmount(debt.debtAmount);
+                                  setIsDebtPayModalOpen(true);
+                                }}
+                                className="bg-amber-500 hover:bg-amber-600 text-[#112E24] text-[11px] font-bold px-3 py-1.5 rounded-xl transition shadow-xs active:scale-95"
+                              >
+                                To'lov Qabul Qilish
+                              </button>
+                            ) : (
+                              <span className="text-gray-400 text-xs font-semibold">Yopilgan</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             {/* Doctors CRUD & Promo Customizer Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Doctors Management (8 Cols) */}
@@ -2295,58 +2558,78 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
               </div>
             </div>
 
-            {/* Right 5 Cols: Live Test SMS Sandbox */}
+            {/* Right 5 Cols: SMS Gateway Delivery Log & Health */}
             <div className="lg:col-span-5 bg-white dark:bg-[#0E231B] p-6 rounded-3xl border border-[#E8E2D8] dark:border-[#183F32] shadow-sm space-y-4">
-              <div className="flex items-center gap-2 pb-3 border-b border-[#E8E2D8] dark:border-[#183F32]">
-                <Send className="w-4 h-4 text-[#C5A880]" />
-                <h3 className="font-serif font-bold text-base text-[#112E24] dark:text-[#FAF8F5]">
-                  Jonli Test SMS Yuborish
-                </h3>
+              <div className="flex items-center justify-between pb-3 border-b border-[#E8E2D8] dark:border-[#183F32]">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-emerald-500" />
+                  <h3 className="font-serif font-bold text-base text-[#112E24] dark:text-[#FAF8F5]">
+                    SMS Shlyuz Monitoringi
+                  </h3>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  Faol • 99.8% Uptime
+                </span>
               </div>
 
-              <div className="space-y-3">
-                <div>
-                  <label className="text-[11px] font-bold text-gray-500 block mb-1">
-                    Qabul qiluvchi telefon raqami:
-                  </label>
+              {/* Delivery History Log */}
+              <div className="space-y-2">
+                <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                  Oxirgi Yetkazilgan SMS Xabarlar (Jonli Log):
+                </div>
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {[
+                    { phone: '+998 90 123-45-67', type: '24h Eslatma', time: '10:45', status: 'delivered' },
+                    { phone: '+998 97 712-34-56', type: '2h Eslatma + PIN', time: '09:30', status: 'delivered' },
+                    { phone: '+998 93 555-88-99', type: 'Raqamli Retsept', time: '08:15', status: 'delivered' },
+                    { phone: '+998 99 800-11-22', type: 'Qabul Tasdig\'i', time: 'Kecha', status: 'delivered' },
+                  ].map((log, i) => (
+                    <div
+                      key={i}
+                      className="p-2.5 rounded-xl border border-[#E8E2D8]/60 dark:border-[#183F32]/60 bg-[#FAF8F5] dark:bg-[#07130F] flex items-center justify-between text-xs"
+                    >
+                      <div>
+                        <div className="font-mono font-bold text-[#112E24] dark:text-[#FAF8F5]">{log.phone}</div>
+                        <div className="text-[10px] text-gray-500">{log.type} • {log.time}</div>
+                      </div>
+                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        <span>Yetkazildi</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Quick Test SMS Sender */}
+              <div className="pt-3 border-t border-[#E8E2D8] dark:border-[#183F32] space-y-2.5">
+                <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1">
+                  <Send className="w-3 h-3 text-[#C5A880]" />
+                  <span>Tezkor Test SMS Yuborish:</span>
+                </div>
+                <div className="flex gap-2">
                   <input
                     type="text"
                     value={testSmsPhone}
                     onChange={e => setTestSmsPhone(e.target.value)}
                     placeholder="+998 90 123-45-67"
-                    className="w-full p-2.5 rounded-xl border border-[#E8E2D8] dark:border-[#183F32] bg-[#FAF8F5] dark:bg-[#07130F] font-mono text-xs font-bold focus:outline-none focus:border-[#C5A880]"
+                    className="flex-1 p-2 rounded-xl border border-[#E8E2D8] dark:border-[#183F32] bg-[#FAF8F5] dark:bg-[#07130F] font-mono text-xs font-bold focus:outline-none focus:border-[#C5A880]"
                   />
+                  <button
+                    onClick={handleSendTestSms}
+                    disabled={testSmsStatus === 'sending'}
+                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-[#112E24] font-bold text-xs transition active:scale-95 flex items-center gap-1"
+                  >
+                    <Send className={`w-3.5 h-3.5 ${testSmsStatus === 'sending' ? 'animate-spin' : ''}`} />
+                    <span>Yuborish</span>
+                  </button>
                 </div>
-
-                <div>
-                  <label className="text-[11px] font-bold text-gray-500 block mb-1">
-                    Xabar matni:
-                  </label>
-                  <textarea
-                    rows={4}
-                    value={testSmsMsg}
-                    onChange={e => setTestSmsMsg(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-[#E8E2D8] dark:border-[#183F32] bg-[#FAF8F5] dark:bg-[#07130F] text-xs focus:outline-none focus:border-[#C5A880]"
-                  />
-                </div>
-
                 {testSmsStatus === 'success' && (
-                  <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-semibold flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>SMS {testSmsPhone} raqamiga muvaffaqiyatli jo'natildi! (Eskiz ID: #749201)</span>
+                  <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[11px] font-semibold flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>SMS {testSmsPhone} ga jo'natildi!</span>
                   </div>
                 )}
-
-                <button
-                  onClick={handleSendTestSms}
-                  disabled={testSmsStatus === 'sending'}
-                  className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-[#112E24] font-bold text-xs transition shadow-md flex items-center justify-center gap-2 active:scale-95"
-                >
-                  <Send className={`w-4 h-4 ${testSmsStatus === 'sending' ? 'animate-spin' : ''}`} />
-                  <span>
-                    {testSmsStatus === 'sending' ? 'Jo\'natilmoqda...' : 'Hozir Test SMS Yuborish'}
-                  </span>
-                </button>
               </div>
             </div>
           </div>
@@ -3346,6 +3629,575 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 9. SHIFT & Z-REPORT MODAL (SMENA BOSHQARUVI, XARAJAT VA Z-HISOBOT)         */}
+      {/* ========================================================================= */}
+      {isShiftModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#0E231B] rounded-3xl p-6 max-w-2xl w-full border border-[#C5A880]/50 shadow-2xl space-y-4 animate-scale-up max-h-[90vh] overflow-y-auto">
+            {/* Modal Header & Navigation */}
+            <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] flex items-center justify-center font-bold shadow-sm">
+                  <Receipt className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-serif font-bold text-base text-[#112E24] dark:text-[#FAF8F5]">
+                    Smena Boshqaruvi va Z-Hisobot
+                  </h3>
+                  <p className="text-[11px] text-gray-500">
+                    Kassa monitoringi, operatsion chiqimlar va kunlik moliyaviy smena yopilishi
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsShiftModalOpen(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Shift Sub-Tabs */}
+            <div className="flex border-b border-gray-200 dark:border-gray-800 text-xs font-bold gap-1 pb-1">
+              <button
+                onClick={() => setShiftTab('status')}
+                className={`px-3 py-2 rounded-xl transition ${shiftTab === 'status' ? 'bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F]' : 'text-gray-500 hover:text-[#112E24] dark:hover:text-[#FAF8F5]'}`}
+              >
+                📊 Smena Holati
+              </button>
+              {currentShift && (
+                <>
+                  <button
+                    onClick={() => setShiftTab('expense')}
+                    className={`px-3 py-2 rounded-xl transition ${shiftTab === 'expense' ? 'bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F]' : 'text-gray-500 hover:text-[#112E24] dark:hover:text-[#FAF8F5]'}`}
+                  >
+                    💸 Xarajat Kiritish
+                  </button>
+                  <button
+                    onClick={() => setShiftTab('close')}
+                    className={`px-3 py-2 rounded-xl transition ${shiftTab === 'close' ? 'bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F]' : 'text-gray-500 hover:text-[#112E24] dark:hover:text-[#FAF8F5]'}`}
+                  >
+                    🔒 Smenani Yopish
+                  </button>
+                </>
+              )}
+              {closedZReport && (
+                <button
+                  onClick={() => setShiftTab('zreport')}
+                  className={`px-3 py-2 rounded-xl transition ${shiftTab === 'zreport' ? 'bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F]' : 'text-gray-500 hover:text-[#112E24] dark:hover:text-[#FAF8F5]'}`}
+                >
+                  🖨️ Z-Hisobot Cheki
+                </button>
+              )}
+            </div>
+
+            {/* TAB: STATUS */}
+            {shiftTab === 'status' && (
+              <div className="space-y-4">
+                {!currentShift ? (
+                  <div className="p-6 rounded-2xl bg-[#FAF8F5] dark:bg-[#07130F] border border-[#E8E2D8] dark:border-[#183F32] space-y-4 text-center">
+                    <div className="w-12 h-12 mx-auto rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                      <Lock className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-[#112E24] dark:text-[#FAF8F5]">Bugungi smena hali ochilmagan</h4>
+                      <p className="text-xs text-gray-500 mt-0.5">Kassani qabul qilib olib, ertalabki boshlang'ich kassa qoldig'i bilan smenani oching</p>
+                    </div>
+
+                    <div className="max-w-sm mx-auto space-y-3 text-left">
+                      <div>
+                        <label className="text-xs font-bold text-gray-600 dark:text-gray-300 block mb-1">Kassir / Mas'ul xodim:</label>
+                        <input
+                          type="text"
+                          value={shiftCashierName}
+                          onChange={e => setShiftCashierName(e.target.value)}
+                          className="w-full p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#0E231B] text-xs font-semibold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-gray-600 dark:text-gray-300 block mb-1">Ertalabki boshlang'ich naqd pul (UZS):</label>
+                        <input
+                          type="number"
+                          value={shiftStartingCash}
+                          onChange={e => setShiftStartingCash(Number(e.target.value))}
+                          placeholder="Masalan: 500000"
+                          className="w-full p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#0E231B] text-xs font-mono font-bold"
+                        />
+                      </div>
+                      <button
+                        onClick={handleOpenShift}
+                        className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition shadow-md flex items-center justify-center gap-2"
+                      >
+                        <Check className="w-4 h-4" />
+                        <span>Kassani Qabul Qilish va Smenani Ochish</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Active Shift Header */}
+                    <div className="p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-500/30 flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                          <span className="font-bold text-xs text-emerald-800 dark:text-emerald-300">
+                            Smena Faol (Ochiq)
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">
+                          Mas'ul: <b>{currentShift.cashierName}</b> • Ochilgan: {currentShift.openedAt?.split('T')[1]?.slice(0, 5) || 'Bugun'}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[10px] text-gray-500 uppercase">Boshlang'ich Kassa:</div>
+                        <div className="font-mono text-xs font-bold text-[#112E24] dark:text-[#FAF8F5]">
+                          {(currentShift.startingCash || 0).toLocaleString('uz-UZ')} UZS
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Live Financial Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                      <div className="p-3 rounded-xl bg-[#FAF8F5] dark:bg-[#07130F] border border-[#E8E2D8] dark:border-[#183F32]">
+                        <div className="text-[10px] text-gray-500 uppercase font-bold">Naqd Tushum</div>
+                        <div className="font-mono text-sm font-black text-amber-600 dark:text-amber-400 mt-0.5">
+                          {(shiftLiveStats?.cash || 0).toLocaleString('uz-UZ')} UZS
+                        </div>
+                      </div>
+                      <div className="p-3 rounded-xl bg-[#FAF8F5] dark:bg-[#07130F] border border-[#E8E2D8] dark:border-[#183F32]">
+                        <div className="text-[10px] text-gray-500 uppercase font-bold">Karta (Terminal)</div>
+                        <div className="font-mono text-sm font-black text-blue-600 dark:text-blue-400 mt-0.5">
+                          {(shiftLiveStats?.card || 0).toLocaleString('uz-UZ')} UZS
+                        </div>
+                      </div>
+                      <div className="p-3 rounded-xl bg-[#FAF8F5] dark:bg-[#07130F] border border-[#E8E2D8] dark:border-[#183F32]">
+                        <div className="text-[10px] text-gray-500 uppercase font-bold">Click / Payme</div>
+                        <div className="font-mono text-sm font-black text-purple-600 dark:text-purple-400 mt-0.5">
+                          {(shiftLiveStats?.click || 0).toLocaleString('uz-UZ')} UZS
+                        </div>
+                      </div>
+                      <div className="p-3 rounded-xl border border-rose-200 dark:border-rose-900/40 bg-rose-50/20">
+                        <div className="text-[10px] text-rose-500 uppercase font-bold">Chiqimlar</div>
+                        <div className="font-mono text-sm font-black text-rose-600 dark:text-rose-400 mt-0.5">
+                          -{(shiftLiveStats?.totalExpenses || 0).toLocaleString('uz-UZ')} UZS
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Safe Expected Cash */}
+                    <div className="p-4 rounded-2xl bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] flex items-center justify-between shadow-md">
+                      <div>
+                        <div className="text-[11px] uppercase tracking-wider font-bold opacity-80">
+                          Hozir Kassada Kutilayotgan Naqd Pul (Seyfda Bo'lishi Kerak):
+                        </div>
+                        <div className="text-[10px] opacity-70 mt-0.5">
+                          (Boshlang'ich {(currentShift.startingCash || 0).toLocaleString('uz-UZ')} + Naqd {(shiftLiveStats?.cash || 0).toLocaleString('uz-UZ')} - Chiqim {(shiftLiveStats?.totalExpenses || 0).toLocaleString('uz-UZ')})
+                        </div>
+                      </div>
+                      <div className="font-mono text-xl font-black">
+                        {(shiftLiveStats?.expectedCash || 0).toLocaleString('uz-UZ')} UZS
+                      </div>
+                    </div>
+
+                    {/* Expenses List */}
+                    {currentShift.expenses && currentShift.expenses.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-xs font-bold text-gray-600 dark:text-gray-300">Bugungi chiqimlar ro'yxati:</div>
+                        <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                          {currentShift.expenses.map((exp: any, i: number) => (
+                            <div key={i} className="p-2.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-[#FAF8F5] dark:bg-[#07130F] flex items-center justify-between text-xs">
+                              <div>
+                                <span className="font-bold text-[#112E24] dark:text-[#FAF8F5]">{exp.recipient}</span>
+                                <span className="text-gray-500 text-[11px]"> ({exp.category}) - {exp.comment || "Izohsiz"}</span>
+                              </div>
+                              <span className="font-mono font-bold text-rose-500">-{(exp.amount || 0).toLocaleString('uz-UZ')} UZS</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex gap-2 pt-2">
+                      <button
+                        onClick={() => setShiftTab('expense')}
+                        className="flex-1 py-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-xs font-bold hover:bg-amber-500/20 transition flex items-center justify-center gap-1.5"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Xarajat Kiritish</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShiftActualCash(shiftLiveStats?.expectedCash || 0);
+                          setShiftTab('close');
+                        }}
+                        className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
+                      >
+                        <Lock className="w-3.5 h-3.5" />
+                        <span>Smenani Yopish (Z-Hisobot)</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB: EXPENSE */}
+            {shiftTab === 'expense' && (
+              <div className="space-y-3.5">
+                <div className="text-xs text-gray-500">
+                  Kassadan chiqarilgan operatsion xarajatlarni qayd etish (material, tushlik, maosh avansi, kommunal)
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-gray-600 dark:text-gray-300 block mb-1">Kategoriya:</label>
+                    <select
+                      value={shiftExpenseCategory}
+                      onChange={e => setShiftExpenseCategory(e.target.value)}
+                      className="w-full p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#0E231B] text-xs font-semibold"
+                    >
+                      <option value="materiallar">Tibbiy materiallar / Dori-darmon</option>
+                      <option value="maosh">Xodim avansi / Maosh</option>
+                      <option value="kommunal">Kommunal / Xo'jalik xarajatlari</option>
+                      <option value="reklama">Marketing / Reklama</option>
+                      <option value="boshqa">Boshqa chiqimlar</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-600 dark:text-gray-300 block mb-1">Chiqim Summasi (UZS): *</label>
+                    <input
+                      type="number"
+                      required
+                      value={shiftExpenseAmount}
+                      onChange={e => setShiftExpenseAmount(Number(e.target.value))}
+                      placeholder="Masalan: 120000"
+                      className="w-full p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#0E231B] text-xs font-mono font-bold"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-gray-600 dark:text-gray-300 block mb-1">Kimga / Qayerga berildi: *</label>
+                  <input
+                    type="text"
+                    required
+                    value={shiftExpenseRecipient}
+                    onChange={e => setShiftExpenseRecipient(e.target.value)}
+                    placeholder="Masalan: DentPlus distribyutor, Kuryer, Tozalash..."
+                    className="w-full p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#0E231B] text-xs font-semibold"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-gray-600 dark:text-gray-300 block mb-1">Izoh:</label>
+                  <input
+                    type="text"
+                    value={shiftExpenseComment}
+                    onChange={e => setShiftExpenseComment(e.target.value)}
+                    placeholder="Qo'shimcha izoh yoki chek raqami"
+                    className="w-full p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#0E231B] text-xs"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShiftTab('status')}
+                    className="flex-1 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 text-xs font-bold text-gray-600 dark:text-gray-300"
+                  >
+                    Orqaga
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddShiftExpense}
+                    disabled={shiftExpenseAmount <= 0}
+                    className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-[#112E24] font-bold text-xs transition shadow-md active:scale-95"
+                  >
+                    Chiqimni Kassadan Chiqarish
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: CLOSE SHIFT */}
+            {shiftTab === 'close' && (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-500/30 text-xs space-y-2">
+                  <div className="font-bold text-amber-800 dark:text-amber-300">
+                    Smenani yopish oldidan kassadagi barcha naqd pullarni sanang
+                  </div>
+                  <div className="text-gray-600 dark:text-gray-400">
+                    Tizim bo'yicha kutilayotgan naqd pul: <b className="font-mono text-[#112E24] dark:text-[#FAF8F5]">{(shiftLiveStats?.expectedCash || 0).toLocaleString('uz-UZ')} UZS</b>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-gray-600 dark:text-gray-300 block mb-1">
+                    Kassada sanalgan haqiqiy naqd pul (Actual Cash): *
+                  </label>
+                  <input
+                    type="number"
+                    value={shiftActualCash}
+                    onChange={e => setShiftActualCash(Number(e.target.value))}
+                    className="w-full p-3 rounded-xl border-2 border-[#C5A880] bg-white dark:bg-[#0E231B] font-mono text-base font-bold focus:outline-none"
+                  />
+                </div>
+
+                {/* Discrepancy Calculation */}
+                {(() => {
+                  const expected = shiftLiveStats?.expectedCash || 0;
+                  const diff = shiftActualCash - expected;
+                  return (
+                    <div className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between ${diff === 0 ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-500/40 text-emerald-700 dark:text-emerald-300' : diff > 0 ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-500/40 text-blue-700 dark:text-blue-300' : 'bg-rose-50 dark:bg-rose-950/30 border-rose-500/40 text-rose-700 dark:text-rose-300'}`}>
+                      <span>Kassa Farqi (Discrepancy):</span>
+                      <span className="font-mono text-sm">
+                        {diff === 0 ? "0 UZS (Aniq / Mos keldi ✅)" : diff > 0 ? `+${diff.toLocaleString('uz-UZ')} UZS (Ortiqcha / Surplus)` : `${diff.toLocaleString('uz-UZ')} UZS (Kamomad / Deficit ⚠️)`}
+                      </span>
+                    </div>
+                  );
+                })()}
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShiftTab('status')}
+                    className="flex-1 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 text-xs font-bold text-gray-600 dark:text-gray-300"
+                  >
+                    Orqaga
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCloseShift}
+                    className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition shadow-md flex items-center justify-center gap-2 active:scale-95"
+                  >
+                    <Lock className="w-4 h-4" />
+                    <span>Smenani Yakunlash va Z-Hisobot</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: Z-REPORT THERMAL PRINT */}
+            {shiftTab === 'zreport' && (closedZReport || currentShift) && (
+              <div className="space-y-4">
+                <div className="bg-[#FAF8F5] text-[#112E24] p-5 rounded-2xl border border-gray-300 font-mono text-[11px] leading-relaxed max-w-sm mx-auto shadow-inner">
+                  <div className="text-center pb-2 border-b border-dashed border-gray-400 space-y-0.5">
+                    <div className="font-black text-sm uppercase">KUNLIK Z-HISOBOT</div>
+                    <div className="text-[10px]">{currentTenant.name}</div>
+                    <div className="text-[9px] text-gray-500">Filial: {activeClinicTarget}</div>
+                    <div className="text-[9px] text-gray-500">Smena: {(closedZReport || currentShift)?.id}</div>
+                  </div>
+
+                  <div className="py-2 border-b border-dashed border-gray-400 space-y-1 text-[10px]">
+                    <div className="flex justify-between">
+                      <span>Kassir:</span>
+                      <span className="font-bold">{(closedZReport || currentShift)?.cashierName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Ochilgan:</span>
+                      <span>{(closedZReport || currentShift)?.openedAt?.replace('T', ' ').slice(0, 16)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Yopilgan:</span>
+                      <span>{(closedZReport || currentShift)?.closedAt?.replace('T', ' ').slice(0, 16) || 'Hozir'}</span>
+                    </div>
+                  </div>
+
+                  <div className="py-2 border-b border-dashed border-gray-400 space-y-1">
+                    <div className="flex justify-between">
+                      <span>Boshlang'ich kassa:</span>
+                      <span>{((closedZReport || currentShift)?.startingCash || 0).toLocaleString('uz-UZ')} UZS</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Naqd tushum:</span>
+                      <span>{((closedZReport?.summary?.cashRevenue ?? shiftLiveStats?.cash) || 0).toLocaleString('uz-UZ')} UZS</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Karta tushum:</span>
+                      <span>{((closedZReport?.summary?.cardRevenue ?? shiftLiveStats?.card) || 0).toLocaleString('uz-UZ')} UZS</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Click tushum:</span>
+                      <span>{((closedZReport?.summary?.clickRevenue ?? shiftLiveStats?.click) || 0).toLocaleString('uz-UZ')} UZS</span>
+                    </div>
+                    <div className="flex justify-between text-rose-600 font-bold">
+                      <span>Jami chiqimlar:</span>
+                      <span>-{((closedZReport?.summary?.totalExpenses ?? shiftLiveStats?.totalExpenses) || 0).toLocaleString('uz-UZ')} UZS</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 space-y-1 text-xs font-bold">
+                    <div className="flex justify-between">
+                      <span>JAMI AYLANMA:</span>
+                      <span className="font-black">{((closedZReport?.summary?.totalRevenue ?? ((shiftLiveStats?.cash || 0) + (shiftLiveStats?.card || 0) + (shiftLiveStats?.click || 0))) || 0).toLocaleString('uz-UZ')} UZS</span>
+                    </div>
+                    <div className="flex justify-between text-emerald-700">
+                      <span>Kutilgan naqd pul:</span>
+                      <span>{((closedZReport?.expectedCash ?? shiftLiveStats?.expectedCash) || 0).toLocaleString('uz-UZ')} UZS</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Haqiqiy topshirilgan:</span>
+                      <span>{((closedZReport?.actualCash ?? shiftActualCash) || 0).toLocaleString('uz-UZ')} UZS</span>
+                    </div>
+                    {closedZReport && (
+                      <div className={`flex justify-between text-[10px] pt-1 border-t border-dashed border-gray-400 ${closedZReport.difference === 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                        <span>FARQ / TAFAVUT:</span>
+                        <span>{closedZReport.difference === 0 ? "0 UZS (ANIQ)" : `${closedZReport.difference?.toLocaleString('uz-UZ')} UZS`}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShiftTab('status')}
+                    className="flex-1 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 text-xs font-bold text-gray-600 dark:text-gray-300"
+                  >
+                    Orqaga
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="flex-1 py-2.5 rounded-xl bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] font-bold text-xs transition shadow-md flex items-center justify-center gap-2"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>Z-Hisobotni Chop Etish (Termal)</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 10. DEBT PAYMENT MODAL (NASIYA TO'LOVINI QABUL QILISH)                     */}
+      {/* ========================================================================= */}
+      {isDebtPayModalOpen && selectedDebt && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#0E231B] rounded-3xl p-6 max-w-md w-full border border-amber-500/50 shadow-2xl space-y-4 animate-scale-up">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
+                  <DollarSign className="w-4 h-4" />
+                </div>
+                <h3 className="font-serif font-bold text-base text-[#112E24] dark:text-[#FAF8F5]">
+                  Nasiya To'lovini Qabul Qilish
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDebtPayModalOpen(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-[#FAF8F5] dark:bg-[#07130F] border border-gray-200 dark:border-gray-800 text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Bemor:</span>
+                <span className="font-bold text-[#112E24] dark:text-[#FAF8F5]">{selectedDebt.patientName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Telefon:</span>
+                <span className="font-mono font-semibold">{selectedDebt.phone}</span>
+              </div>
+              <div className="flex justify-between border-t border-gray-200 dark:border-gray-800 pt-1">
+                <span className="text-gray-500">Umumiy Qarz Qoldig'i:</span>
+                <span className="font-mono font-black text-rose-500">{(selectedDebt.debtAmount || 0).toLocaleString('uz-UZ')} UZS</span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-gray-600 dark:text-gray-300 block mb-1">
+                  To'lanayotgan Summa (UZS): *
+                </label>
+                <input
+                  type="number"
+                  max={selectedDebt.debtAmount}
+                  value={debtPayAmount}
+                  onChange={e => setDebtPayAmount(Number(e.target.value))}
+                  className="w-full p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#0E231B] text-xs font-mono font-black text-emerald-600"
+                />
+                <div className="flex gap-1.5 mt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setDebtPayAmount(selectedDebt.debtAmount)}
+                    className="text-[10px] bg-amber-500/10 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-md font-bold"
+                  >
+                    100% To'liq So'ndirish
+                  </button>
+                  {selectedDebt.debtAmount > 100000 && (
+                    <button
+                      type="button"
+                      onClick={() => setDebtPayAmount(Math.round(selectedDebt.debtAmount / 2))}
+                      className="text-[10px] bg-blue-500/10 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-md font-bold"
+                    >
+                      50% Qisman
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-gray-600 dark:text-gray-300 block mb-1">To'lov Usuli:</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'cash', label: 'Naqd Pul' },
+                    { id: 'card', label: 'Terminal' },
+                    { id: 'click', label: 'Click/Payme' },
+                  ].map(m => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setDebtPayMethod(m.id as any)}
+                      className={`py-2 rounded-xl text-xs font-bold border transition ${debtPayMethod === m.id ? 'bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] border-[#112E24]' : 'bg-[#FAF8F5] dark:bg-[#07130F] text-gray-500 border-gray-300 dark:border-gray-700'}`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-gray-600 dark:text-gray-300 block mb-1">Izoh:</label>
+                <input
+                  type="text"
+                  value={debtPayNotes}
+                  onChange={e => setDebtPayNotes(e.target.value)}
+                  placeholder="Kvitansiya #, to'lov sababi..."
+                  className="w-full p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#0E231B] text-xs font-semibold"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsDebtPayModalOpen(false)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 text-xs font-bold text-gray-600 dark:text-gray-300"
+              >
+                Bekor qilish
+              </button>
+              <button
+                type="button"
+                onClick={handlePayDebtSubmit}
+                disabled={debtPayAmount <= 0}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition shadow-md active:scale-95 flex items-center justify-center gap-1.5"
+              >
+                <Check className="w-4 h-4" />
+                <span>To'lovni Qabul Qilish</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

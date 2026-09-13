@@ -1,0 +1,74 @@
+[
+  {
+    "id": "DEBT-APPT-DEBT-ea3d68",
+    "appointmentId": "APPT-DEBT-ea3d68",
+    "pinCode": "5566",
+    "patientName": "Aziz Olimov",
+    "phone": "+998901234599",
+    "clinicId": "test_clinic_1267bb",
+    "tenantId": "test_tenant_a1edeb",
+    "doctorName": "Dr. Jamshid Rustamov",
+    "serviceName": "Shveysariya Implanti",
+    "totalAmount": 5000000,
+    "paidAmount": 5000000,
+    "debtAmount": 0,
+    "paymentStatus": "paid",
+    "createdAt": "2026-09-13T11:18:22.268901+05:00",
+    "history": [
+      {
+        "amount": 2000000,
+        "date": "2026-09-13T11:18:22.268952+05:00",
+        "method": "cash",
+        "notes": "Qabul chog'ida qisman to'langan"
+      },
+      {
+        "amount": 1000000,
+        "date": "2026-09-13T11:18:22.287151+05:00",
+        "method": "card",
+        "notes": "Terminal orqali qisman to'lov"
+      },
+      {
+        "amount": 2000000,
+        "date": "2026-09-13T11:18:22.297584+05:00",
+        "method": "cash",
+        "notes": "Qoldiq to'liq to'landi"
+      }
+    ]
+  },
+  {
+    "id": "DEBT-APPT-DEBT-7ed358",
+    "appointmentId": "APPT-DEBT-7ed358",
+    "pinCode": "5566",
+    "patientName": "Aziz Olimov",
+    "phone": "+998901234599",
+    "clinicId": "test_clinic_724410",
+    "tenantId": "test_tenant_49f8fd",
+    "doctorName": "Dr. Jamshid Rustamov",
+    "serviceName": "Shveysariya Implanti",
+    "totalAmount": 5000000,
+    "paidAmount": 5000000,
+    "debtAmount": 0,
+    "paymentStatus": "paid",
+    "createdAt": "2026-09-13T11:07:49.040642+05:00",
+    "history": [
+      {
+        "amount": 2000000,
+        "date": "2026-09-13T11:07:49.040657+05:00",
+        "method": "cash",
+        "notes": "Qabul chog'ida qisman to'langan"
+      },
+      {
+        "amount": 1000000,
+        "date": "2026-09-13T11:07:49.053977+05:00",
+        "method": "card",
+        "notes": "Terminal orqali qisman to'lov"
+      },
+      {
+        "amount": 2000000,
+        "date": "2026-09-13T11:07:49.061537+05:00",
+        "method": "cash",
+        "notes": "Qoldiq to'liq to'landi"
+      }
+    ]
+  }
+]

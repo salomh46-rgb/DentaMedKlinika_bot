@@ -119,9 +119,72 @@ export interface Appointment {
   hasPromoUltrasonic?: boolean;
   discountAmount?: number;
   totalAmount?: number;
+  paidAmount?: number;
+  debtAmount?: number;
+  paymentStatus?: 'paid' | 'partial' | 'unpaid';
+  paymentMethod?: string;
+  familyMemberName?: string;
+  department?: Department;
   clinicId?: ClinicId;
   telegramUserId?: number;
   telegramUsername?: string;
+}
+
+export interface ShiftExpense {
+  id: string;
+  clinicId: string;
+  tenantId: string;
+  category: string;
+  amount: number;
+  recipient: string;
+  comment?: string;
+  createdAt: string;
+}
+
+export interface Shift {
+  id: string;
+  clinicId: string;
+  tenantId: string;
+  cashierName: string;
+  startingCash: number;
+  openedAt: string;
+  status: 'open' | 'closed';
+  notes?: string;
+  closedAt?: string;
+  actualCash?: number;
+  expectedCash?: number;
+  difference?: number;
+  totalRevenue?: number;
+  cashRevenue?: number;
+  cardRevenue?: number;
+  onlineRevenue?: number;
+  totalExpense?: number;
+  appointmentsCount?: number;
+}
+
+export interface DebtPaymentHistory {
+  amount: number;
+  date: string;
+  method: string;
+  notes?: string;
+}
+
+export interface DebtRecord {
+  id: string;
+  appointmentId: string;
+  pinCode: string;
+  patientName: string;
+  phone: string;
+  clinicId: string;
+  tenantId: string;
+  doctorName: string;
+  serviceName: string;
+  totalAmount: number;
+  paidAmount: number;
+  debtAmount: number;
+  paymentStatus: 'paid' | 'partial' | 'unpaid';
+  createdAt: string;
+  history: DebtPaymentHistory[];
 }
 
 export interface PrescriptionMedicine {
