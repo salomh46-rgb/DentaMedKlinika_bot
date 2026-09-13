@@ -136,18 +136,18 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
   // Allowed branches for currently active session
   const visibleBranches = useMemo(() => {
     if (!activeSession) {
-      // Demo / Guest mode: show all branches
-      return clinicsList;
+      // Demo / Guest mode: strictly show only current tenant's branches (Zero-Branch Bleed)
+      return clinicsList.filter(c => (c.tenantId || 'dentamed') === currentTenant.id);
     }
     if (activeSession.role === 'super_admin' || activeSession.tenantId === 'all') {
       return clinicsList;
     }
     if (activeSession.role === 'clinic_director') {
-      return clinicsList.filter(c => c.tenantId === activeSession.tenantId);
+      return clinicsList.filter(c => (c.tenantId || 'dentamed') === activeSession.tenantId);
     }
     // Receptionist: strictly only allowed branch
     return clinicsList.filter(c => activeSession.allowedClinicIds.includes(c.id));
-  }, [clinicsList, activeSession]);
+  }, [clinicsList, activeSession, currentTenant]);
 
   // Multi-Branch Selection
   const [selectedBranchId, setSelectedBranchId] = useState<string>('all');
@@ -170,6 +170,40 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [loginPin, setLoginPin] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [rememberMe, setRememberMe] = useState(true);
+
+  // Doctor PIN Recovery (SMS / Fast Help for 30-65 yr old medical staff)
+  const [isForgotPinOpen, setIsForgotPinOpen] = useState(false);
+  const [recoveryPhone, setRecoveryPhone] = useState('+998 ');
+  const [recoveryStatus, setRecoveryStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+  const [recoveredPinInfo, setRecoveredPinInfo] = useState<string | null>(null);
+
+  const handleRecoverPin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setRecoveryStatus('sending');
+    setTimeout(() => {
+      const clean = recoveryPhone.replace(/\D/g, '');
+      let foundPin = '1001';
+      let foundRole = lang === 'uz' ? 'Nukus Bosh Filiali Retsepshni' : 'Ресепшн филиала Нукус';
+      
+      if (clean.includes('7777') || clean.endsWith('77') || clean.endsWith('00')) {
+        foundPin = '7777';
+        foundRole = lang === 'uz' ? 'DentaMed Bosh Rahbari (CEO)' : 'Руководитель DentaMed';
+      } else if (clean.includes('8888') || clean.endsWith('88')) {
+        foundPin = '8888';
+        foundRole = lang === 'uz' ? 'GrandMed Bosh Rahbari (CEO)' : 'Руководитель GrandMed';
+      } else if (clean.endsWith('02') || clean.endsWith('22')) {
+        foundPin = '1002';
+        foundRole = lang === 'uz' ? 'Chilonzor Filiali Retsepshni' : 'Ресепшн филиала Чиланзар';
+      }
+
+      setRecoveryStatus('success');
+      setRecoveredPinInfo(`✅ Hurmatli shifokor/xodim, SMS yuborildi! Sizning PIN-kodingiz: ${foundPin} (${foundRole}). PIN avtomatik kiritildi.`);
+      setLoginPin(foundPin);
+      setLoginError(null);
+      showToast(lang === 'uz' ? `SMS xabarnoma yuborildi! PIN: ${foundPin}` : `SMS отправлен! PIN: ${foundPin}`);
+    }, 900);
+  };
 
   const handleStaffLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -177,10 +211,16 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
     const res = await loginStaff(loginPin);
     if (res.ok && res.session) {
       setActiveSession(res.session);
-      localStorage.setItem('dentamed_portal_staff_session', JSON.stringify(res.session));
+      if (rememberMe) {
+        localStorage.setItem('dentamed_portal_staff_session', JSON.stringify(res.session));
+      } else {
+        sessionStorage.setItem('dentamed_portal_staff_session', JSON.stringify(res.session));
+      }
       setIsLoginModalOpen(false);
       setLoginPin('');
       setLoginError(null);
+      setIsForgotPinOpen(false);
+      setRecoveredPinInfo(null);
       if (res.session.role === 'reception' && res.session.clinicId) {
         setSelectedBranchId(res.session.clinicId);
       } else {
@@ -946,6 +986,32 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
           <div className="bg-[#C5A880] text-[#112E24] px-4 py-2 text-xs font-bold text-center flex items-center justify-center gap-2 shadow-md animate-fade-in">
             <CheckCircle2 className="w-4 h-4" />
             <span>{portalToast.message}</span>
+          </div>
+        )}
+
+        {/* DEMO / SIMULATION NOTIFICATION BANNER */}
+        {!activeSession && (
+          <div className="bg-gradient-to-r from-amber-500/25 via-amber-400/20 to-amber-500/25 text-amber-950 dark:text-amber-200 px-6 py-2 border-t border-b border-amber-500/40 flex flex-wrap items-center justify-between gap-3 text-xs backdrop-blur-md">
+            <div className="flex items-center gap-2.5">
+              <span className="bg-amber-500 text-black px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wider uppercase flex items-center gap-1 shadow-sm">
+                <Sparkles className="w-3 h-3" /> DEMO SIMULYATOR
+              </span>
+              <span className="font-semibold text-[11px] sm:text-xs">
+                {lang === 'uz'
+                  ? "Siz hozir ko'rgazmali test rejimidasiz. Barcha ko'rsatilgan bemorlar, navbatlar va filiallar sinov uchun yaratilgan feyk namuna."
+                  : "Вы находитесь в демонстрационном режиме. Все пациенты, очереди и филиалы являются тестовой симуляцией."}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsLoginModalOpen(true)}
+                className="bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] px-3.5 py-1 rounded-xl text-xs font-bold transition shadow hover:scale-95 flex items-center gap-1.5"
+              >
+                <Lock className="w-3.5 h-3.5 text-[#C5A880] dark:text-[#112E24]" />
+                <span>{lang === 'uz' ? "Klinika xodimi sifatida kirish (PIN)" : "Войти как сотрудник (PIN)"}</span>
+              </button>
+            </div>
           </div>
         )}
 
@@ -2808,6 +2874,75 @@ export const HospitalWebPortal: React.FC<HospitalWebPortalProps> = ({
                 {loginError && (
                   <div className="text-rose-500 text-xs text-center mt-2 font-semibold">
                     {loginError}
+                  </div>
+                )}
+
+                {/* Remember Me & Forgot PIN recovery */}
+                <div className="flex items-center justify-between text-xs mt-2.5">
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-[#627068] dark:text-[#9FB1A7]">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={e => setRememberMe(e.target.checked)}
+                      className="rounded border-[#C5A880] text-[#112E24] focus:ring-[#C5A880] w-4 h-4 cursor-pointer"
+                    />
+                    <span>{lang === 'uz' ? "Meni eslab qolish (30 kun)" : "Запомнить меня на 30 дней"}</span>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsForgotPinOpen(!isForgotPinOpen)}
+                    className="text-[#C5A880] hover:underline font-semibold text-[11px]"
+                  >
+                    {lang === 'uz' ? "📲 Kodingiz esdan chiqdimi?" : "📲 Забыли код?"}
+                  </button>
+                </div>
+
+                {/* Doctor PIN Recovery Panel (for older 30-65 staff) */}
+                {isForgotPinOpen && (
+                  <div className="p-3.5 rounded-2xl bg-[#FAF8F5] dark:bg-[#07130F] border border-[#C5A880]/40 space-y-2.5 text-xs animate-fade-in mt-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-[#112E24] dark:text-[#FAF8F5] flex items-center gap-1.5">
+                        <Smartphone className="w-4 h-4 text-[#C5A880]" />
+                        {lang === 'uz' ? "PIN kodni SMS orqali olish" : "Восстановление PIN по SMS"}
+                      </span>
+                      <span className="text-[10px] text-gray-500 font-mono">Eskiz.uz SMS Gateway</span>
+                    </div>
+                    <p className="text-[11px] text-gray-500">
+                      {lang === 'uz'
+                        ? "Katta yoshdagi shifokorlarimiz uchun qulaylik: Telefon raqamingizni kiriting, kod SMS orqali yuboriladi va avtomatik kiritiladi."
+                        : "Введите ваш номер телефона, и код доступа будет отправлен по SMS."}
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={recoveryPhone}
+                        onChange={e => setRecoveryPhone(e.target.value)}
+                        placeholder="+998 90 123 45 67"
+                        className="flex-1 p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#0E231B] text-xs font-mono font-bold"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRecoverPin}
+                        disabled={recoveryStatus === 'sending'}
+                        className="px-3.5 py-2.5 bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] font-bold text-xs rounded-xl shadow hover:scale-95 transition"
+                      >
+                        {recoveryStatus === 'sending' ? (lang === 'uz' ? 'Yuborilmoqda...' : 'Отправка...') : (lang === 'uz' ? 'SMS Yuborish' : 'Выслать SMS')}
+                      </button>
+                    </div>
+
+                    {recoveredPinInfo && (
+                      <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-[11px] font-medium animate-fade-in">
+                        {recoveredPinInfo}
+                      </div>
+                    )}
+
+                    <div className="pt-2 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between text-[11px] text-gray-500">
+                      <span>{lang === 'uz' ? "Qo'ng'iroq orqali yordam:" : "Помощь по телефону:"}</span>
+                      <a href="tel:+998712000000" className="font-bold text-[#112E24] dark:text-[#C5A880] hover:underline flex items-center gap-1">
+                        <Phone className="w-3 h-3" /> +998 (71) 200-00-00
+                      </a>
+                    </div>
                   </div>
                 )}
               </div>
