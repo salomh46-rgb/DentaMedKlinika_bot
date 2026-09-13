@@ -64,10 +64,67 @@ def get_all_clinics() -> list:
             logging.error(f"Error loading clinics: {e}")
     return []
 
-# User context map: user_id -> {"tenantId": str, "clinicId": str | None}
+# User preferences persistence: user_id -> {"tenantId": str, "clinicId": str, "updatedAt": str}
+PREF_FILE = DATA_DIR / "user_preferences.json"
+
+def load_user_preferences() -> dict:
+    if PREF_FILE.exists():
+        try:
+            with open(PREF_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logging.error(f"Error loading user_preferences: {e}")
+    return {}
+
+def save_user_preference(user_id: int, tenant_id: str, clinic_id: str):
+    prefs = load_user_preferences()
+    prefs[str(user_id)] = {
+        "tenantId": tenant_id,
+        "clinicId": clinic_id,
+        "updatedAt": datetime.now().isoformat()
+    }
+    try:
+        with open(PREF_FILE, "w", encoding="utf-8") as f:
+            json.dump(prefs, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logging.error(f"Error saving user preference: {e}")
+
+def get_user_preference(user_id: int) -> dict | None:
+    prefs = load_user_preferences()
+    return prefs.get(str(user_id))
+
+# User context map in memory
 user_context_map: dict[int, dict] = {}
 
-def get_main_keyboard(webapp_url: str) -> ReplyKeyboardMarkup:
+# Active preview message tracking: user_id -> [location_message_id, card_message_id]
+preview_tracker: dict[int, list[int]] = {}
+
+async def cleanup_user_preview(chat_id: int, user_id: int, bot: Bot):
+    """Deletes temporary map pin and preview card messages from the chat"""
+    msg_ids = preview_tracker.get(user_id, [])
+    if msg_ids:
+        for mid in msg_ids:
+            try:
+                await bot.delete_message(chat_id=chat_id, message_id=mid)
+            except Exception:
+                pass
+        preview_tracker[user_id] = []
+
+def get_branch_selection_keyboard(clinics: list) -> InlineKeyboardMarkup:
+    """List of branches as neat clickable options (2-rasm uslubida toza tanlov)"""
+    buttons = []
+    for c in clinics:
+        c_id = c.get("id")
+        c_name = c.get("name", "Filial")
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"📍 {c_name}",
+                callback_data=f"preview_branch_{c_id}"
+            )
+        ])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def get_main_keyboard(webapp_url: str, clinic_name: str = "") -> ReplyKeyboardMarkup:
     """Bottom persistent menu with WebApp button"""
     return ReplyKeyboardMarkup(
         keyboard=[
@@ -79,10 +136,11 @@ def get_main_keyboard(webapp_url: str) -> ReplyKeyboardMarkup:
             ],
             [
                 KeyboardButton(text="📋 Mening Qabullarim"),
-                KeyboardButton(text="📍 Lokatsiya & Manzil")
+                KeyboardButton(text="📍 Filial Xaritasi")
             ],
             [
-                KeyboardButton(text="📞 24/7 Konsultatsiya")
+                KeyboardButton(text="🔄 Filialni O'zgartirish"),
+                KeyboardButton(text="📞 Aloqa Markazi")
             ]
         ],
         resize_keyboard=True,
@@ -130,54 +188,66 @@ async def cmd_start(message: types.Message, command: CommandObject = None):
         if found_clinic:
             clinic_id = found_clinic["id"]
             tenant_id = found_clinic.get("tenantId", DEFAULT_TENANT_ID)
+            save_user_preference(user_id, tenant_id, clinic_id)
         elif args_clean in tenants or args_clean.replace("c_", "") in tenants:
             tenant_id = args_clean if args_clean in tenants else args_clean.replace("c_", "")
 
-    # Store user context for session
+    # Check saved preference if not specified via deep link
+    if not clinic_id:
+        pref = get_user_preference(user_id)
+        if pref and pref.get("clinicId"):
+            clinic_id = pref["clinicId"]
+            tenant_id = pref.get("tenantId", DEFAULT_TENANT_ID)
+
     user_context_map[user_id] = {"tenantId": tenant_id, "clinicId": clinic_id}
 
-    tenant = tenants.get(tenant_id) or {"name": "DentaMed Atelier", "phone": "+998 (71) 200-00-00"}
-    tenant_name = tenant.get("name", "Klinika")
-    
-    # Branches for this tenant
-    branches = [c for c in clinics if c.get("tenantId") == tenant_id]
-    if not branches:
-        branches = clinics[:2]
-
-    targeted_clinic = next((c for c in branches if c["id"] == clinic_id), None)
-    
-    # Prepare WebApp URL with explicit tenant and clinic locking
-    patient_webapp_url = f"{WEBAPP_URL}?view=patient&tenant={tenant_id}"
+    # If clinic is chosen, show personalized welcome
     if clinic_id:
-        patient_webapp_url += f"&clinic={clinic_id}"
+        clinic = next((c for c in clinics if c["id"] == clinic_id), None)
+        if clinic:
+            patient_webapp_url = f"{WEBAPP_URL}?view=patient&tenant={tenant_id}&clinic={clinic_id}"
+            welcome_text = (
+                f"🌿 <b>Assalomu alaykum, {user_name}!</b>\n\n"
+                f"Sizning biriktirilgan filialingiz:\n"
+                f"🏥 <b>{clinic.get('name')}</b>\n"
+                f"🏢 <b>Manzil:</b> {clinic.get('address')}\n"
+                f"🕒 <b>Ish vaqti:</b> {clinic.get('workingHours')}\n"
+                f"📞 <b>Tel:</b> {clinic.get('phone')}\n\n"
+                f"Pastdagi <b>«🦷 Qabulga Yozilish»</b> tugmasi orqali to'g'ridan-to'g'ri ushbu filial shifokorlariga yozilishingiz mumkin."
+            )
+            ikb = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="✨ 3D Jag' & Tish Xaritasi (Mini App)",
+                            web_app=WebAppInfo(url=patient_webapp_url)
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(text="📍 Xaritada ko'rish", callback_data=f"show_my_map_{clinic_id}"),
+                        InlineKeyboardButton(text="🔄 Filialni almashtirish", callback_data="show_branch_list")
+                    ]
+                ]
+            )
+            await message.answer(
+                text=welcome_text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=get_main_keyboard(patient_webapp_url, clinic.get('name'))
+            )
+            await message.answer("👇 <b>Qabulga yozilish yoki filialni o'zgartirish:</b>", reply_markup=ikb)
+            return
 
-    if targeted_clinic:
-        branch_info = (
-            f"📍 <b>Tanlangan filial:</b> {targeted_clinic.get('name')}\n"
-            f"🏢 Manzil: {targeted_clinic.get('address')}\n"
-            f"🕒 Ish vaqti: {targeted_clinic.get('workingHours', 'Har kuni')}"
-        )
-    else:
-        branch_lines = "\n".join([f"• <b>{b.get('name')}</b> ({b.get('address', '')})" for b in branches[:4]])
-        branch_info = f"💎 <b>Bizning filiallarimiz:</b>\n{branch_lines}"
-
+    # If NO clinic is chosen yet: present clean branch selection list
     welcome_text = (
         f"🌿 <b>Assalomu alaykum, {user_name}!</b>\n\n"
-        f"<b>{tenant_name}</b> rasmiy qabul botiga xush kelibsiz.\n\n"
-        f"{branch_info}\n\n"
-        f"Pastdagi <b>«🦷 Qabulga Yozilish»</b> tugmasini bosib, navbatsiz qulay vaqtni band qilishingiz mumkin."
+        f"Klinikamiz rasmiy qabul botiga xush kelibsiz.\n\n"
+        f"🏥 <b>Qabulga yozilish uchun o'zingizga yaqin filialni tanlang:</b>\n"
+        f"<i>(Har bir filialni bosib xaritasini ko'rishingiz va o'zingizga qulayini tasdiqlashingiz mumkin)</i>"
     )
-
     await message.answer(
         text=welcome_text,
         parse_mode=ParseMode.HTML,
-        reply_markup=get_main_keyboard(patient_webapp_url)
-    )
-
-    await message.answer(
-        text=f"👇 <b>{tenant_name} qabuliga yozilish uchun Mini Appni oching:</b>",
-        parse_mode=ParseMode.HTML,
-        reply_markup=get_inline_menu(patient_webapp_url)
+        reply_markup=get_branch_selection_keyboard(clinics)
     )
 
 @dp.message(F.text == "📋 Mening Qabullarim")
@@ -239,54 +309,239 @@ async def handle_my_appointments(message: types.Message):
         )
         await message.answer(card, parse_mode=ParseMode.HTML, reply_markup=action_kb)
 
-@dp.message(F.text == "📍 Lokatsiya & Manzil")
-async def handle_location(message: types.Message):
-    user_id = message.from_user.id
-    ctx = user_context_map.get(user_id, {"tenantId": DEFAULT_TENANT_ID, "clinicId": None})
-    tenant_id = ctx.get("tenantId", DEFAULT_TENANT_ID)
+# =========================================================================
+# BRANCH PREVIEW, CLEANUP, SELECTION & LOCKING WORKFLOW (Single-Bot White-Label)
+# =========================================================================
 
-    tenants = get_all_tenants()
+@dp.callback_query(F.data.startswith("preview_branch_"))
+async def handle_preview_branch(callback: types.CallbackQuery, bot: Bot):
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+    clinic_id = callback.data.replace("preview_branch_", "")
+
     clinics = get_all_clinics()
-    tenant = tenants.get(tenant_id) or {"name": "Klinika"}
-    branches = [c for c in clinics if c.get("tenantId") == tenant_id]
-    if not branches:
-        branches = clinics[:2]
+    clinic = next((c for c in clinics if c["id"] == clinic_id), None)
+    if not clinic:
+        await callback.answer("Filial ma'lumotlari topilmadi", show_alert=True)
+        return
 
-    loc_text = f"📍 <b>{tenant.get('name')} Filiallari va Manzillari:</b>\n\n"
-    keyboard_buttons = []
+    # 1. Clean up any previous temporary map pin and card (never pollute the chat!)
+    await cleanup_user_preview(chat_id, user_id, bot)
 
-    for i, b in enumerate(branches, 1):
-        loc_text += (
-            f"🏥 <b>{i}. {b.get('name')}</b>\n"
-            f"🏢 Manzil: {b.get('address')}\n"
-            f"🚇 Mo'ljal: {b.get('landmark', '-')}\n"
-            f"🕒 Ish vaqti: {b.get('workingHours', '08:30 - 20:30')}\n"
-            f"📞 Tel: {b.get('phone', '+998')}\n\n"
-        )
-        if b.get("location"):
-            keyboard_buttons.append([
+    # 2. Send Telegram Location (GPS Map Pin)
+    loc = clinic.get("location", {"lat": 41.2995, "lng": 69.2401})
+    loc_msg = await bot.send_location(
+        chat_id=chat_id,
+        latitude=loc.get("lat", 41.2995),
+        longitude=loc.get("lng", 69.2401)
+    )
+
+    # 3. Send detail card with Action Buttons right below the map
+    card_text = (
+        f"🏥 <b>{clinic.get('name')}</b>\n"
+        f"🏢 <b>Manzil:</b> {clinic.get('address')}\n"
+        f"🚇 <b>Mo'ljal:</b> {clinic.get('landmark', '-')}\n"
+        f"🕒 <b>Ish vaqti:</b> {clinic.get('workingHours', 'Har kuni')}\n"
+        f"📞 <b>Aloqa:</b> {clinic.get('phone', '+998')}\n\n"
+        f"📍 <i>Ushbu filial sizga yaqin va qulaymi?</i>"
+    )
+    action_kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
                 InlineKeyboardButton(
-                    text=f"🗺 {b.get('name')} xaritasi",
-                    callback_data=f"send_loc_{b.get('id')}"
+                    text="✅ Shu yer menga yaqin (Tasdiqlash)",
+                    callback_data=f"confirm_branch_{clinic_id}"
                 )
-            ])
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔙 Boshqa filialni ko'rish",
+                    callback_data="back_to_branches"
+                ),
+                InlineKeyboardButton(
+                    text="❌ Bekor qilish",
+                    callback_data="cancel_preview"
+                )
+            ]
+        ]
+    )
+    card_msg = await callback.message.answer(card_text, parse_mode=ParseMode.HTML, reply_markup=action_kb)
 
-    ikb = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons) if keyboard_buttons else None
-    await message.answer(loc_text, parse_mode=ParseMode.HTML, reply_markup=ikb)
+    # Track message IDs to delete if user clicks Back or Cancel
+    preview_tracker[user_id] = [loc_msg.message_id, card_msg.message_id]
+    await callback.answer()
 
-    # If exactly 1 branch, send location pin directly
-    if len(branches) == 1 and branches[0].get("location"):
-        loc = branches[0]["location"]
-        await message.answer_location(latitude=loc.get("lat", 41.2995), longitude=loc.get("lng", 69.2401))
-
-@dp.callback_query(F.data.startswith("send_loc_"))
-async def callback_send_location(callback: types.CallbackQuery, bot: Bot):
-    clinic_id = callback.data.replace("send_loc_", "")
+@dp.callback_query(F.data == "back_to_branches")
+async def handle_back_to_branches(callback: types.CallbackQuery, bot: Bot):
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
     clinics = get_all_clinics()
-    found = next((c for c in clinics if c.get("id") == clinic_id), None)
-    if found and found.get("location"):
-        loc = found["location"]
-        await callback.message.answer(f"📍 <b>{found.get('name')}</b> geolokatsiyasi:", parse_mode=ParseMode.HTML)
+
+    # Clean up map pin and card so chat remains completely clean
+    await cleanup_user_preview(chat_id, user_id, bot)
+
+    await callback.message.answer(
+        text="🏥 <b>O'zingizga qulay boshqa filialni tanlang:</b>",
+        parse_mode=ParseMode.HTML,
+        reply_markup=get_branch_selection_keyboard(clinics)
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data == "cancel_preview")
+async def handle_cancel_preview(callback: types.CallbackQuery, bot: Bot):
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+
+    # Clean up map pin and card
+    await cleanup_user_preview(chat_id, user_id, bot)
+
+    await callback.message.answer(
+        text="❌ Filial tanlash bekor qilindi.\nQayta tanlash uchun pastdagi <b>«🔄 Filialni O'zgartirish»</b> tugmasini bosing.",
+        parse_mode=ParseMode.HTML
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("confirm_branch_"))
+async def handle_confirm_branch(callback: types.CallbackQuery, bot: Bot):
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+    clinic_id = callback.data.replace("confirm_branch_", "")
+
+    clinics = get_all_clinics()
+    clinic = next((c for c in clinics if c["id"] == clinic_id), None)
+    if not clinic:
+        await callback.answer("Filial topilmadi", show_alert=True)
+        return
+
+    # Clean up temporary preview map & card
+    await cleanup_user_preview(chat_id, user_id, bot)
+
+    tenant_id = clinic.get("tenantId", DEFAULT_TENANT_ID)
+    save_user_preference(user_id, tenant_id, clinic_id)
+    user_context_map[user_id] = {"tenantId": tenant_id, "clinicId": clinic_id}
+
+    patient_webapp_url = f"{WEBAPP_URL}?view=patient&tenant={tenant_id}&clinic={clinic_id}"
+
+    success_text = (
+        f"🎉 <b>Ajoyib tanlov! Filial muvaffaqiyatli biriktirildi.</b>\n\n"
+        f"🏥 <b>Tanlangan filial:</b> {clinic.get('name')}\n"
+        f"🏢 <b>Manzil:</b> {clinic.get('address')}\n"
+        f"🕒 <b>Ish vaqti:</b> {clinic.get('workingHours')}\n"
+        f"📞 <b>Tel:</b> {clinic.get('phone')}\n\n"
+        f"✨ Endi qabulga yozilganingizda barcha xizmatlar va shifokorlar aynan shu filialga tegishli bo'ladi.\n\n"
+        f"👇 <b>Qabulga yozilish uchun quyidagi tugmani bosing:</b>"
+    )
+    confirm_kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🦷 Qabulga Yozilish (Mini App)",
+                    web_app=WebAppInfo(url=patient_webapp_url)
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📍 Xaritada ko'rish",
+                    callback_data=f"show_my_map_{clinic_id}"
+                ),
+                InlineKeyboardButton(
+                    text="🔄 Filialni almashtirish",
+                    callback_data="show_branch_list"
+                )
+            ]
+        ]
+    )
+
+    await callback.message.answer(success_text, parse_mode=ParseMode.HTML, reply_markup=confirm_kb)
+    await callback.message.answer(
+        "👇 <i>Qulay menyu sizning filialingizga moslashtirildi:</i>",
+        reply_markup=get_main_keyboard(patient_webapp_url, clinic.get('name'))
+    )
+
+    # Update chat menu button for this user
+    try:
+        await bot.set_chat_menu_button(
+            chat_id=chat_id,
+            menu_button=MenuButtonWebApp(
+                text="🦷 Qabulga Yozilish",
+                web_app=WebAppInfo(url=patient_webapp_url)
+            )
+        )
+    except Exception as e:
+        logging.warning(f"Could not update menu button: {e}")
+
+    await callback.answer("Filial muvaffaqiyatli biriktirildi!")
+
+@dp.message(F.text == "🔄 Filialni O'zgartirish")
+@dp.message(Command("filial"))
+@dp.callback_query(F.data == "show_branch_list")
+async def handle_change_branch(event: types.Message | types.CallbackQuery, bot: Bot):
+    chat_id = event.chat.id if isinstance(event, types.Message) else event.message.chat.id
+    user_id = event.from_user.id
+    clinics = get_all_clinics()
+
+    await cleanup_user_preview(chat_id, user_id, bot)
+
+    text = (
+        "🏥 <b>Qabulga yozilish uchun o'zingizga qulay filialni tanlang:</b>\n"
+        "<i>(Xaritasini ko'rish uchun filial ustiga bosing)</i>"
+    )
+    kb = get_branch_selection_keyboard(clinics)
+
+    if isinstance(event, types.CallbackQuery):
+        await event.message.answer(text, parse_mode=ParseMode.HTML, reply_markup=kb)
+        await event.answer()
+    else:
+        await event.answer(text, parse_mode=ParseMode.HTML, reply_markup=kb)
+
+@dp.message(F.text.in_(["📍 Filial Xaritasi", "📍 Lokatsiya & Manzil"]))
+@dp.message(Command("location"))
+async def handle_location(message: types.Message, bot: Bot):
+    user_id = message.from_user.id
+    pref = get_user_preference(user_id)
+    clinics = get_all_clinics()
+
+    clinic = None
+    if pref and pref.get("clinicId"):
+        clinic = next((c for c in clinics if c["id"] == pref["clinicId"]), None)
+
+    if clinic:
+        loc = clinic.get("location", {"lat": 41.2995, "lng": 69.2401})
+        await message.answer(
+            f"📍 <b>Sizning biriktirilgan filialingiz:</b>\n\n"
+            f"🏥 <b>{clinic.get('name')}</b>\n"
+            f"🏢 <b>Manzil:</b> {clinic.get('address')}\n"
+            f"🕒 <b>Ish vaqti:</b> {clinic.get('workingHours')}\n"
+            f"📞 <b>Aloqa:</b> {clinic.get('phone')}",
+            parse_mode=ParseMode.HTML
+        )
+        await bot.send_location(
+            chat_id=message.chat.id,
+            latitude=loc.get("lat", 41.2995),
+            longitude=loc.get("lng", 69.2401)
+        )
+        ikb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="🔄 Boshqa filialni tanlash", callback_data="show_branch_list")
+                ]
+            ]
+        )
+        await message.answer("Boshqa filialga o'tishni istaysizmi?", reply_markup=ikb)
+    else:
+        await message.answer(
+            "🏥 <b>Qabulga yozilish uchun filialni tanlang:</b>",
+            parse_mode=ParseMode.HTML,
+            reply_markup=get_branch_selection_keyboard(clinics)
+        )
+
+@dp.callback_query(F.data.startswith("show_my_map_"))
+async def callback_show_my_map(callback: types.CallbackQuery, bot: Bot):
+    clinic_id = callback.data.replace("show_my_map_", "")
+    clinics = get_all_clinics()
+    clinic = next((c for c in clinics if c["id"] == clinic_id), None)
+    if clinic and clinic.get("location"):
+        loc = clinic["location"]
         await bot.send_location(
             chat_id=callback.message.chat.id,
             latitude=loc.get("lat", 41.2995),
@@ -294,9 +549,9 @@ async def callback_send_location(callback: types.CallbackQuery, bot: Bot):
         )
         await callback.answer()
     else:
-        await callback.answer("Lokatsiya ma'lumotlari topilmadi", show_alert=True)
+        await callback.answer("Lokatsiya topilmadi", show_alert=True)
 
-@dp.message(F.text == "📞 24/7 Konsultatsiya")
+@dp.message(F.text.in_(["📞 Aloqa Markazi", "📞 24/7 Konsultatsiya"]))
 async def handle_contact(message: types.Message):
     user_id = message.from_user.id
     ctx = user_context_map.get(user_id, {"tenantId": DEFAULT_TENANT_ID, "clinicId": None})
