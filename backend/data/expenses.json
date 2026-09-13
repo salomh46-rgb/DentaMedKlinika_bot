@@ -1,5 +1,15 @@
 [
   {
+    "id": "EXP-1789282325",
+    "clinicId": "test_clinic_0516e2",
+    "tenantId": "test_tenant_77e82c",
+    "category": "materiallar",
+    "amount": 50000,
+    "recipient": "StomMarket MChJ",
+    "comment": "Bir martalik shpritslar",
+    "createdAt": "2026-09-13T11:52:05.420361+05:00"
+  },
+  {
     "id": "EXP-1789280302",
     "clinicId": "test_clinic_d1996b",
     "tenantId": "test_tenant_16415d",

@@ -16,6 +16,8 @@ interface HeaderProps {
   isStaff?: boolean;
   staffSession?: StaffSession | null;
   onToggleStaff?: () => void;
+  lockedTenantId?: string | null;
+  lockedClinicId?: string | null;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -30,23 +32,28 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectClinic,
   isStaff = false,
   staffSession = null,
-  onToggleStaff
+  onToggleStaff,
+  lockedTenantId = null,
+  lockedClinicId = null
 }) => {
   const [isClinicMenuOpen, setIsClinicMenuOpen] = useState(false);
   
   const activeClinic = CLINICS.find(c => c.id === selectedClinicId) || CLINICS[0];
-  const activeTenantId = activeClinic.tenantId || 'dentamed';
+  const activeTenantId = lockedTenantId || activeClinic.tenantId || 'dentamed';
   const [menuTenantTab, setMenuTenantTab] = useState<string>(activeTenantId);
 
-  // Sync menu tenant tab if active clinic changes
+  // Sync menu tenant tab if active clinic changes or tenant is locked
   React.useEffect(() => {
-    if (activeClinic.tenantId) {
+    if (lockedTenantId) {
+      setMenuTenantTab(lockedTenantId);
+    } else if (activeClinic.tenantId) {
       setMenuTenantTab(activeClinic.tenantId);
     }
-  }, [activeClinic.tenantId]);
+  }, [activeClinic.tenantId, lockedTenantId]);
 
   const isReception = staffSession?.role === 'reception';
   const isDirector = staffSession?.isDirector;
+  const isBranchLocked = !!(lockedClinicId || (lockedTenantId && CLINICS.filter(c => (c.tenantId || 'dentamed') === lockedTenantId).length <= 1));
 
   // Filter branches for the selected tenant tab
   const branchesForTab = CLINICS.filter(c => (c.tenantId || 'dentamed') === menuTenantTab);
@@ -128,7 +135,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Bespoke Luxury Emblem */}
           <div className="w-10 h-10 rounded-xl bg-[#112E24] dark:bg-[#183F32] border border-[#C5A880]/40 flex items-center justify-center text-[#C5A880] shadow-sm flex-shrink-0">
             <span className="font-serif text-lg font-bold tracking-tight">
-              {activeTenantId === 'grandmed' ? 'G' : 'D'}
+              {(TENANTS.find(t => t.id === activeTenantId)?.name || activeClinic.name).charAt(0).toUpperCase()}
             </span>
           </div>
 
@@ -153,18 +160,22 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="relative">
             <button
               onClick={() => {
-                if (!isReception) {
+                if (!isReception && !isBranchLocked) {
                   setIsClinicMenuOpen(!isClinicMenuOpen);
                 }
               }}
               className={`flex items-center gap-1.5 bg-[#FAF8F5] dark:bg-[#0E231B] border px-2.5 py-1.5 rounded-xl text-xs font-semibold shadow-sm transition active:scale-95 ${
-                isReception
+                isReception || isBranchLocked
                   ? 'border-emerald-500/40 text-emerald-800 dark:text-emerald-300 cursor-default'
                   : 'border-[#C5A880]/40 hover:border-[#C5A880] text-[#112E24] dark:text-[#D6BF9F]'
               }`}
-              title={isReception ? (lang === 'uz' ? 'Filial qulflangan (Retsepshn xodimi)' : 'Филиал зафиксирован') : (lang === 'uz' ? 'Filialni almashtirish' : 'Сменить филиал')}
+              title={
+                isReception || isBranchLocked
+                  ? (lang === 'uz' ? 'Filial qulflangan' : 'Филиал зафиксирован')
+                  : (lang === 'uz' ? 'Filialni almashtirish' : 'Сменить филиал')
+              }
             >
-              {isReception ? (
+              {isReception || isBranchLocked ? (
                 <Lock className="w-3.5 h-3.5 text-emerald-500" />
               ) : (
                 <Building2 className="w-3.5 h-3.5 text-[#C5A880]" />
@@ -172,42 +183,45 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="text-[11px] font-medium hidden sm:inline">
                 {lang === 'uz' ? activeClinic.branchName.uz : activeClinic.branchName.ru}
               </span>
-              {!isReception && (
+              {!isReception && !isBranchLocked && (
                 <ChevronDown className={`w-3 h-3 transition-transform ${isClinicMenuOpen ? 'rotate-180' : ''}`} />
               )}
             </button>
 
             {/* 2-Step Switcher popup menu */}
-            {isClinicMenuOpen && !isReception && (
+            {isClinicMenuOpen && !isReception && !isBranchLocked && (
               <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-[#0E231B] rounded-2xl shadow-2xl border border-[#C5A880]/30 p-2.5 z-50 space-y-2 animate-fadeIn">
-                <div className="text-[10px] uppercase font-bold text-[#C5A880] tracking-wider px-1">
-                  🏥 {lang === 'uz' ? '1-bosqich: Klinika / Brendni tanlang' : 'Шаг 1: Выберите Клинику / Бренд'}
-                </div>
+                {!lockedTenantId && (
+                  <>
+                    <div className="text-[10px] uppercase font-bold text-[#C5A880] tracking-wider px-1">
+                      🏥 {lang === 'uz' ? '1-bosqich: Klinika / Brendni tanlang' : 'Шаг 1: Выберите Клинику / Бренд'}
+                    </div>
 
-                {/* Step 1: Tenant Brands Selector */}
-                <div className="grid grid-cols-2 gap-1 bg-[#FAF8F5] dark:bg-[#07130F] p-1 rounded-xl border border-[#E8E2D8] dark:border-[#183F32]">
-                  {TENANTS.map(tenant => {
-                    const isTabActive = menuTenantTab === tenant.id;
-                    return (
-                      <button
-                        key={tenant.id}
-                        type="button"
-                        onClick={() => setMenuTenantTab(tenant.id)}
-                        className={`px-2 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 ${
-                          isTabActive
-                            ? 'bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] shadow-sm'
-                            : 'text-[#627068] dark:text-[#9FB1A7] hover:text-[#112E24] dark:hover:text-[#FAF8F5]'
-                        }`}
-                      >
-                        <span>{tenant.id === 'dentamed' ? '🏥 DentaMed' : '🏥 GrandMed'}</span>
-                        <span className="text-[9px] opacity-75">({tenant.badge.split(' ')[0]})</span>
-                      </button>
-                    );
-                  })}
-                </div>
+                    {/* Step 1: Tenant Brands Selector */}
+                    <div className="grid grid-cols-2 gap-1 bg-[#FAF8F5] dark:bg-[#07130F] p-1 rounded-xl border border-[#E8E2D8] dark:border-[#183F32]">
+                      {TENANTS.map(tenant => {
+                        const isTabActive = menuTenantTab === tenant.id;
+                        return (
+                          <button
+                            key={tenant.id}
+                            type="button"
+                            onClick={() => setMenuTenantTab(tenant.id)}
+                            className={`px-2 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 ${
+                              isTabActive
+                                ? 'bg-[#112E24] dark:bg-[#C5A880] text-[#FAF8F5] dark:text-[#07130F] shadow-sm'
+                                : 'text-[#627068] dark:text-[#9FB1A7] hover:text-[#112E24] dark:hover:text-[#FAF8F5]'
+                            }`}
+                          >
+                            <span>🏥 {tenant.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
 
                 <div className="text-[10px] uppercase font-bold text-[#C5A880] tracking-wider px-1 pt-1">
-                  📍 {lang === 'uz' ? '2-bosqich: Filialni tanlang' : 'Шаг 2: Выберите филиал'}
+                  📍 {lang === 'uz' ? 'Filialni tanlang:' : 'Выберите филиал:'}
                 </div>
 
                 {/* Step 2: Branches List for the active tenant */}

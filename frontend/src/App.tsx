@@ -21,7 +21,38 @@ import { Calendar, CheckCircle2, Shield, Award, Users, Building2, MapPin, Phone,
 export function App() {
   const [lang, setLang] = useState<Language>('uz');
   const [activeTab, setActiveTab] = useState<string>('services');
-  const [selectedClinicId, setSelectedClinicId] = useState<ClinicId>('nukus');
+  // Check URL params for Tenant & Clinic isolation
+  const urlParams = useMemo(() => {
+    try {
+      return new URLSearchParams(window.location.search);
+    } catch {
+      return new URLSearchParams();
+    }
+  }, []);
+
+  const lockedTenantId = useMemo(() => {
+    return urlParams.get('tenant') || null;
+  }, [urlParams]);
+
+  const lockedClinicId = useMemo(() => {
+    return urlParams.get('clinic') || urlParams.get('branch') || null;
+  }, [urlParams]);
+
+  const [selectedClinicId, setSelectedClinicId] = useState<ClinicId>(() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      const cParam = p.get('clinic') || p.get('branch');
+      if (cParam && CLINICS.some(c => c.id === cParam)) {
+        return cParam as ClinicId;
+      }
+      const tParam = p.get('tenant');
+      if (tParam) {
+        const matchingBranch = CLINICS.find(c => c.tenantId === tParam);
+        if (matchingBranch) return matchingBranch.id as ClinicId;
+      }
+    } catch {}
+    return 'nukus';
+  });
   
   // Dynamic Live Data from Backend API (with instant mock fallback)
   const [doctors, setDoctors] = useState<Doctor[]>(DOCTORS);
@@ -33,11 +64,17 @@ export function App() {
     return !!(window.Telegram?.WebApp?.initData);
   }, []);
 
-  // Standalone Hospital CRM: Defaults to TRUE for Vercel deployment
+  // Standalone Hospital CRM: Defaults to TRUE for direct desktop Vercel, but FALSE if in Telegram, tenant locked or view=patient
   const [isPortalMode, setIsPortalMode] = useState<boolean>(() => {
     try {
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('view') === 'patient' || urlParams.get('patient') === '1') {
+      const p = new URLSearchParams(window.location.search);
+      if (
+        p.get('view') === 'patient' ||
+        p.get('patient') === '1' ||
+        p.get('tenant') ||
+        p.get('clinic') ||
+        !!(window.Telegram?.WebApp?.initData)
+      ) {
         return false;
       }
       return true;
@@ -153,8 +190,11 @@ export function App() {
   }, [selectedClinicId]);
 
   const currentTenant = useMemo(() => {
+    if (lockedTenantId) {
+      return TENANTS.find(t => t.id === lockedTenantId) || TENANTS[0];
+    }
     return TENANTS.find(t => t.id === currentClinic?.tenantId) || TENANTS[0];
-  }, [currentClinic]);
+  }, [currentClinic, lockedTenantId]);
 
   const tenantClinics = useMemo(() => {
     return CLINICS.filter(c => c.tenantId === currentTenant.id);
@@ -338,6 +378,8 @@ export function App() {
         isStaff={isStaff}
         onToggleStaff={handleToggleStaff}
         staffSession={staffSession}
+        lockedTenantId={lockedTenantId}
+        lockedClinicId={lockedClinicId}
       />
 
       {/* Main Container - Expands for Reception Kanban & Owner Dashboard */}

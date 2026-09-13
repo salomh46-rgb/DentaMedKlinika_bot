@@ -14,7 +14,7 @@ if sys.platform == "win32":
         pass
 
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import CommandStart, Command, CommandObject
 from aiogram.types import (
     ReplyKeyboardMarkup,
     KeyboardButton,
@@ -35,10 +35,37 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8520791524:AAF8Y5jt6R-fIDS4DXPiRWGpFNN8Quqsung")
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "")
 WEBAPP_URL = os.getenv("WEBAPP_URL", "https://dentamed-hospital-crm.vercel.app")
+DEFAULT_TENANT_ID = os.getenv("DEFAULT_TENANT_ID", "dentamed")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 dp = Dispatcher()
+
+DATA_DIR = Path(__file__).resolve().parent / "data"
+
+def get_all_tenants() -> dict:
+    fpath = DATA_DIR / "tenants.json"
+    if fpath.exists():
+        try:
+            with open(fpath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return {t["id"]: t for t in data if "id" in t}
+        except Exception as e:
+            logging.error(f"Error loading tenants: {e}")
+    return {}
+
+def get_all_clinics() -> list:
+    fpath = DATA_DIR / "clinics.json"
+    if fpath.exists():
+        try:
+            with open(fpath, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logging.error(f"Error loading clinics: {e}")
+    return []
+
+# User context map: user_id -> {"tenantId": str, "clinicId": str | None}
+user_context_map: dict[int, dict] = {}
 
 def get_main_keyboard(webapp_url: str) -> ReplyKeyboardMarkup:
     """Bottom persistent menu with WebApp button"""
@@ -80,32 +107,77 @@ def get_inline_menu(webapp_url: str) -> InlineKeyboardMarkup:
     )
 
 @dp.message(CommandStart())
-async def cmd_start(message: types.Message):
+async def cmd_start(message: types.Message, command: CommandObject = None):
+    user_id = message.from_user.id
     user_name = message.from_user.first_name or "Hurmatli mijoz"
     
+    tenants = get_all_tenants()
+    clinics = get_all_clinics()
+
+    tenant_id = DEFAULT_TENANT_ID
+    clinic_id = None
+
+    args = command.args if command else None
+    if args:
+        args_clean = args.strip().lower()
+        found_clinic = None
+        for c in clinics:
+            c_id = c.get("id", "").lower()
+            if args_clean in [c_id, f"branch_{c_id}", f"clinic_{c_id}", c_id.replace("dentamed-", "").replace("grandmed-", "")]:
+                found_clinic = c
+                break
+        
+        if found_clinic:
+            clinic_id = found_clinic["id"]
+            tenant_id = found_clinic.get("tenantId", DEFAULT_TENANT_ID)
+        elif args_clean in tenants or args_clean.replace("c_", "") in tenants:
+            tenant_id = args_clean if args_clean in tenants else args_clean.replace("c_", "")
+
+    # Store user context for session
+    user_context_map[user_id] = {"tenantId": tenant_id, "clinicId": clinic_id}
+
+    tenant = tenants.get(tenant_id) or {"name": "DentaMed Atelier", "phone": "+998 (71) 200-00-00"}
+    tenant_name = tenant.get("name", "Klinika")
+    
+    # Branches for this tenant
+    branches = [c for c in clinics if c.get("tenantId") == tenant_id]
+    if not branches:
+        branches = clinics[:2]
+
+    targeted_clinic = next((c for c in branches if c["id"] == clinic_id), None)
+    
+    # Prepare WebApp URL with explicit tenant and clinic locking
+    patient_webapp_url = f"{WEBAPP_URL}?view=patient&tenant={tenant_id}"
+    if clinic_id:
+        patient_webapp_url += f"&clinic={clinic_id}"
+
+    if targeted_clinic:
+        branch_info = (
+            f"📍 <b>Tanlangan filial:</b> {targeted_clinic.get('name')}\n"
+            f"🏢 Manzil: {targeted_clinic.get('address')}\n"
+            f"🕒 Ish vaqti: {targeted_clinic.get('workingHours', 'Har kuni')}"
+        )
+    else:
+        branch_lines = "\n".join([f"• <b>{b.get('name')}</b> ({b.get('address', '')})" for b in branches[:4]])
+        branch_info = f"💎 <b>Bizning filiallarimiz:</b>\n{branch_lines}"
+
     welcome_text = (
         f"🌿 <b>Assalomu alaykum, {user_name}!</b>\n\n"
-        f"<b>DentaMed Atelier</b> — Shveysariya standartidagi Stomatologiya va LOR markazining rasmiy botiga xush kelibsiz.\n\n"
-        f"💎 <b>Bizning imkoniyatlar:</b>\n"
-        f"• Ko'p filialli qulay qabul (Nukus Bosh filiali & Chilonzor filiali)\n"
-        f"• Interaktiv 32-tishli 3D va anatomik jag' xaritasi\n"
-        f"• Real-vaqtda bo'sh vaqtlarni band qilish (Double-booking himoyasi)\n"
-        f"• Shveysariya standarti bo'yicha Raqamli Retsept (e-Prescription)\n"
-        f"• Retsepshn uchun navbatsiz 4 xonali PIN-kod\n\n"
-        f"Pastdagi <b>«🦷 Qabulga Yozilish»</b> tugmasini bosib, qabulga yozilishingiz mumkin."
+        f"<b>{tenant_name}</b> rasmiy qabul botiga xush kelibsiz.\n\n"
+        f"{branch_info}\n\n"
+        f"Pastdagi <b>«🦷 Qabulga Yozilish»</b> tugmasini bosib, navbatsiz qulay vaqtni band qilishingiz mumkin."
     )
-    
+
     await message.answer(
         text=welcome_text,
         parse_mode=ParseMode.HTML,
-        reply_markup=get_main_keyboard(WEBAPP_URL)
+        reply_markup=get_main_keyboard(patient_webapp_url)
     )
-    
-    # Inline launch card
+
     await message.answer(
-        text="👇 <b>Qabulga yozilish uchun Mini Appni oching:</b>",
+        text=f"👇 <b>{tenant_name} qabuliga yozilish uchun Mini Appni oching:</b>",
         parse_mode=ParseMode.HTML,
-        reply_markup=get_inline_menu(WEBAPP_URL)
+        reply_markup=get_inline_menu(patient_webapp_url)
     )
 
 @dp.message(F.text == "📋 Mening Qabullarim")
@@ -169,32 +241,84 @@ async def handle_my_appointments(message: types.Message):
 
 @dp.message(F.text == "📍 Lokatsiya & Manzil")
 async def handle_location(message: types.Message):
-    loc_text = (
-        "📍 <b>DentaMed Filiallari:</b>\n\n"
-        "🏥 <b>1. Nukus Bosh filiali:</b>\n"
-        "🏢 Toshkent sh., Mirobod t., Nukus ko'chasi, 24-uy\n"
-        "🚇 Mo'ljal: Rossiya elchixonasi yonida, 204-kabinet\n"
-        "🕒 Ish vaqti: 24/7 Kechayu-kunduz\n"
-        "📞 Tel: +998 (71) 200-00-00\n\n"
-        "🏥 <b>2. Chilonzor filiali:</b>\n"
-        "🏢 Toshkent sh., Chilonzor t., Bunyodkor shox ko'chasi, 42-uy\n"
-        "🚇 Mo'ljal: Novza metro bekati, Korzinka yonida\n"
-        "🕒 Ish vaqti: 08:00 - 21:00 (Har kuni)\n"
-        "📞 Tel: +998 (71) 200-03-03"
-    )
-    await message.answer(loc_text, parse_mode=ParseMode.HTML)
-    await message.answer_location(latitude=41.2995, longitude=69.2401)
+    user_id = message.from_user.id
+    ctx = user_context_map.get(user_id, {"tenantId": DEFAULT_TENANT_ID, "clinicId": None})
+    tenant_id = ctx.get("tenantId", DEFAULT_TENANT_ID)
+
+    tenants = get_all_tenants()
+    clinics = get_all_clinics()
+    tenant = tenants.get(tenant_id) or {"name": "Klinika"}
+    branches = [c for c in clinics if c.get("tenantId") == tenant_id]
+    if not branches:
+        branches = clinics[:2]
+
+    loc_text = f"📍 <b>{tenant.get('name')} Filiallari va Manzillari:</b>\n\n"
+    keyboard_buttons = []
+
+    for i, b in enumerate(branches, 1):
+        loc_text += (
+            f"🏥 <b>{i}. {b.get('name')}</b>\n"
+            f"🏢 Manzil: {b.get('address')}\n"
+            f"🚇 Mo'ljal: {b.get('landmark', '-')}\n"
+            f"🕒 Ish vaqti: {b.get('workingHours', '08:30 - 20:30')}\n"
+            f"📞 Tel: {b.get('phone', '+998')}\n\n"
+        )
+        if b.get("location"):
+            keyboard_buttons.append([
+                InlineKeyboardButton(
+                    text=f"🗺 {b.get('name')} xaritasi",
+                    callback_data=f"send_loc_{b.get('id')}"
+                )
+            ])
+
+    ikb = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons) if keyboard_buttons else None
+    await message.answer(loc_text, parse_mode=ParseMode.HTML, reply_markup=ikb)
+
+    # If exactly 1 branch, send location pin directly
+    if len(branches) == 1 and branches[0].get("location"):
+        loc = branches[0]["location"]
+        await message.answer_location(latitude=loc.get("lat", 41.2995), longitude=loc.get("lng", 69.2401))
+
+@dp.callback_query(F.data.startswith("send_loc_"))
+async def callback_send_location(callback: types.CallbackQuery, bot: Bot):
+    clinic_id = callback.data.replace("send_loc_", "")
+    clinics = get_all_clinics()
+    found = next((c for c in clinics if c.get("id") == clinic_id), None)
+    if found and found.get("location"):
+        loc = found["location"]
+        await callback.message.answer(f"📍 <b>{found.get('name')}</b> geolokatsiyasi:", parse_mode=ParseMode.HTML)
+        await bot.send_location(
+            chat_id=callback.message.chat.id,
+            latitude=loc.get("lat", 41.2995),
+            longitude=loc.get("lng", 69.2401)
+        )
+        await callback.answer()
+    else:
+        await callback.answer("Lokatsiya ma'lumotlari topilmadi", show_alert=True)
 
 @dp.message(F.text == "📞 24/7 Konsultatsiya")
 async def handle_contact(message: types.Message):
+    user_id = message.from_user.id
+    ctx = user_context_map.get(user_id, {"tenantId": DEFAULT_TENANT_ID, "clinicId": None})
+    tenant_id = ctx.get("tenantId", DEFAULT_TENANT_ID)
+
+    tenants = get_all_tenants()
+    clinics = get_all_clinics()
+    tenant = tenants.get(tenant_id) or {"name": "Klinika", "phone": "+998 (71) 200-00-00"}
+    branches = [c for c in clinics if c.get("tenantId") == tenant_id]
+
     contact_text = (
-        "📞 <b>24/7 Tezkor Aloqa Markazi:</b>\n\n"
-        "Bemorlarimiz uchun kechayu-kunduz navbatchi stomatolog va LOR-shifokor xizmat ko'rsatadi.\n\n"
-        "☎️ <b>Nukus Bosh filiali:</b> +998 (71) 200-00-00\n"
-        "☎️ <b>Chilonzor filiali:</b> +998 (71) 200-03-03\n"
-        "💬 <b>Telegram Admin:</b> @dentamed_admin\n"
-        "🌐 <b>Veb-sayt:</b> https://dentamed.uz"
+        f"📞 <b>{tenant.get('name')} — Tezkor Aloqa Markazi:</b>\n\n"
+        "Bemorlarimiz uchun malakali shifokorlar va retsepshn xizmat ko'rsatadi.\n\n"
     )
+    for b in branches:
+        contact_text += f"☎️ <b>{b.get('name')}:</b> {b.get('phone', '+998')}\n"
+
+    if tenant.get("email"):
+        contact_text += f"✉️ <b>Email:</b> {tenant.get('email')}\n"
+    if tenant.get("phone") and not branches:
+        contact_text += f"☎️ <b>Asosiy raqam:</b> {tenant.get('phone')}\n"
+
     await message.answer(contact_text, parse_mode=ParseMode.HTML)
 
 # Handle Data received from Telegram Mini App (sendData)
