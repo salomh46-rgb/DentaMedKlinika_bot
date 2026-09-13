@@ -20,17 +20,21 @@ from aiogram.types import (
     KeyboardButton,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
-    WebAppInfo
+    WebAppInfo,
+    MenuButtonWebApp
 )
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 
+# Reliable .env loading
+env_file = Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=env_file)
 load_dotenv()
 
 # Configuration
-BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8520791524:AAF8Y5jt6R-fIDS4DXPiRWGpFNN8Quqsung")
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "")
-WEBAPP_URL = os.getenv("WEBAPP_URL", "http://localhost:5173/")
+WEBAPP_URL = os.getenv("WEBAPP_URL", "https://dentamed-hospital-crm.vercel.app")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -462,6 +466,17 @@ async def main():
         return
         
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    try:
+        await bot.set_chat_menu_button(
+            menu_button=MenuButtonWebApp(
+                text="🦷 Qabulga Yozilish",
+                web_app=WebAppInfo(url=WEBAPP_URL)
+            )
+        )
+        print(f"✅ Telegram Chat Menu Button o'rnatildi: {WEBAPP_URL}")
+    except Exception as e:
+        print(f"⚠️ Chat Menu Button xatolik: {e}")
+
     print(f"🚀 DentaMed Telegram Boti ishga tushmoqda...")
     print(f"🔗 Ulangan WebApp URL: {WEBAPP_URL}")
     await dp.start_polling(bot)
