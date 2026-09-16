@@ -34,3 +34,4 @@ Thumbs.db
 .pytest_cache/
 .pytest_temp/
 tests/.tmp/
+backend/frontend/

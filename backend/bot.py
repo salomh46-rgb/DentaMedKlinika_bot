@@ -32,7 +32,7 @@ load_dotenv(dotenv_path=env_file)
 load_dotenv()
 
 # Configuration
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8520791524:AAF8Y5jt6R-fIDS4DXPiRWGpFNN8Quqsung")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "")
 WEBAPP_URL = os.getenv("WEBAPP_URL", "https://dentamed-hospital-crm.vercel.app")
 DEFAULT_TENANT_ID = os.getenv("DEFAULT_TENANT_ID", "dentamed")
