@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Request, Query, UploadFile, File, 
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime, timezone, timedelta
+import os
 import server
 from server import *
 
@@ -73,9 +74,10 @@ def staff_login(payload: StaffLoginModel, request: Request):
     tenants = load_json_file(TENANTS_FILE)
     clinics = load_json_file(CLINICS_FILE)
 
-    # 1. Check Owner / Director PINs
+    # 1. Check Owner / Director PINs from registered tenants
     for t in tenants:
-        if str(t.get("ownerPin", "")).strip() == pin or (pin == "7777" and t.get("id") == "dentamed") or (pin == "8888" and t.get("id") == "grandmed"):
+        owner_pin = str(t.get("ownerPin", "")).strip()
+        if owner_pin and owner_pin == pin:
             clear_failed_logins(client_ip)
             allowed_branches = [c["id"] for c in clinics if c.get("tenantId") == t.get("id")]
             branch_count = len(allowed_branches)
@@ -101,8 +103,9 @@ def staff_login(payload: StaffLoginModel, request: Request):
                 "staffName": t.get("ownerName", "Klinika Rahbari")
             }
 
-    # 2. Super Admin PIN (2026, 0000)
-    if pin in ["2026", "0000"]:
+    # 2. Super Admin PIN (configurable via environment variable)
+    super_admin_pin = os.getenv("SUPER_ADMIN_PIN", "").strip()
+    if super_admin_pin and pin == super_admin_pin:
         clear_failed_logins(client_ip)
         all_branches = [c["id"] for c in clinics]
         session_data = {

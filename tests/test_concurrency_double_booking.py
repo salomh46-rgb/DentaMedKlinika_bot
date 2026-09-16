@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 import os
 import json
 import pytest
@@ -15,12 +15,10 @@ import server
 from server import app
 
 @pytest.fixture(autouse=True)
-def isolate_database(monkeypatch):
+def isolate_database(tmp_path, monkeypatch):
     """Har bir test uchun alohida toza vaqtinchalik ma'lumotlar bazasi"""
-    tmp_dir = Path(__file__).parent / ".tmp"
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    test_db = tmp_dir / f"test_appointments_{os.getpid()}.json"
-    test_prescriptions = tmp_dir / f"test_prescriptions_{os.getpid()}.json"
+    test_db = tmp_path / "test_appointments.json"
+    test_prescriptions = tmp_path / "test_prescriptions.json"
     
     with open(test_db, "w", encoding="utf-8") as f:
         json.dump([], f)
@@ -29,12 +27,6 @@ def isolate_database(monkeypatch):
 
     monkeypatch.setattr(server, "DB_FILE", test_db)
     monkeypatch.setattr(server, "PRESCRIPTIONS_FILE", test_prescriptions)
-    
-    async def mock_notify(*args, **kwargs):
-        return True
-    monkeypatch.setattr(server, "notify_patient", mock_notify)
-    monkeypatch.setattr(server, "notify_admin_group", mock_notify)
-    monkeypatch.setattr(server, "notify_prescription", mock_notify)
 
 @pytest.mark.asyncio
 async def test_concurrency_double_booking_lock():

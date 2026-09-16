@@ -175,24 +175,24 @@ async def create_appointment(appt: AppointmentModel):
                     )
 
         # 2. DOUBLE-BOOKING CHECK:
-        # Same doctor, same date, same time, same clinic, and status != 'cancelled'
+        # Same doctor, same date, same time across ANY clinic, and status != 'cancelled'
         for existing in db:
             if existing.get("status") == "cancelled":
                 continue
             existing_doc_id = existing.get("doctor", {}).get("id")
-            existing_clinic = existing.get("clinicId", "dentamed-nukus")
-            new_clinic = appt.clinicId or "dentamed-nukus"
 
             if (
                 existing_doc_id == doc_id
                 and existing.get("date") == appt.date
                 and existing.get("time") == appt.time
-                and existing_clinic == new_clinic
             ):
-                raise HTTPException(
-                    status_code=409,
-                    detail="Ushbu vaqt allaqachon boshqa bemor tomonidan band qilingan. Iltimos, boshqa vaqtni tanlang."
-                )
+                existing_clinic = existing.get("clinicId", "dentamed-nukus")
+                new_clinic = appt.clinicId or "dentamed-nukus"
+                if existing_clinic == new_clinic:
+                    detail_msg = "Ushbu vaqt allaqachon boshqa bemor tomonidan band qilingan. Iltimos, boshqa vaqtni tanlang."
+                else:
+                    detail_msg = f"Shifokor ushbu vaqtda boshqa filialda ({existing_clinic}) qabulda bo'ladi. Iltimos, boshqa vaqtni tanlang."
+                raise HTTPException(status_code=409, detail=detail_msg)
 
         appt_dict = appt.model_dump() if hasattr(appt, "model_dump") else appt.dict()
         db.insert(0, appt_dict)

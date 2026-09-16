@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Request, Query, UploadFile, File, 
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime, timezone, timedelta
+import time
 import server
 from server import *
 
@@ -230,8 +231,25 @@ class SmsSendModel(BaseModel):
     phone: str
     message: str
 
+SMS_RATE_LIMIT = {}
+
 @router.post("/api/sms/send")
-async def send_sms_api(payload: SmsSendModel):
+async def send_sms_api(payload: SmsSendModel, request: Request):
+    client_ip = request.client.host if request.client else "unknown"
+    now_ts = time.time()
+    recent = [t for t in SMS_RATE_LIMIT.get(client_ip, []) if now_ts - t < 60]
+    if len(recent) >= 5:
+        raise HTTPException(status_code=429, detail="Juda ko'p SMS so'rovi yuborildi. Iltimos, 1 daqiqa kuting.")
+    recent.append(now_ts)
+    SMS_RATE_LIMIT[client_ip] = recent
+
+    clean_phone = "".join(c for c in payload.phone if c.isdigit())
+    if not (len(clean_phone) >= 9 and len(clean_phone) <= 12):
+        raise HTTPException(status_code=400, detail="Telefon raqami noto'g'ri ko'rsatilgan.")
+
+    if len(payload.message.strip()) > 300:
+        raise HTTPException(status_code=400, detail="Xabar matni juda uzun (maksimal 300 belgi).")
+
     try:
         from sms_service import send_sms_notification
     except ImportError:

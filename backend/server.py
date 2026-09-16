@@ -53,8 +53,11 @@ def load_json_file(file_path: Path) -> list:
         return []
 
 def save_json_file(file_path: Path, data: Any):
-    with open(file_path, "w", encoding="utf-8") as f:
+    file_path = Path(file_path)
+    tmp_path = file_path.with_name(f".{file_path.name}.tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tmp_path, file_path)
 
 def load_db() -> list:
     return load_json_file(DB_FILE)
