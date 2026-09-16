@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import logging
+import tempfile
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
@@ -64,6 +65,34 @@ def get_all_clinics() -> list:
             logging.error(f"Error loading clinics: {e}")
     return []
 
+def get_all_doctors() -> list:
+    fpath = DATA_DIR / "doctors.json"
+    if fpath.exists():
+        try:
+            with open(fpath, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logging.error(f"Error loading doctors: {e}")
+    return []
+
+def save_json_atomic(filepath: Path, data: any):
+    filepath = Path(filepath)
+    temp_dir = filepath.parent
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    temp_file = tempfile.NamedTemporaryFile("w", dir=temp_dir, delete=False, encoding="utf-8")
+    try:
+        json.dump(data, temp_file, ensure_ascii=False, indent=2)
+        temp_file.flush()
+        temp_file.close()
+        os.replace(temp_file.name, filepath)
+    except Exception as e:
+        if os.path.exists(temp_file.name):
+            try:
+                os.remove(temp_file.name)
+            except Exception:
+                pass
+        raise e
+
 # User preferences persistence: user_id -> {"tenantId": str, "clinicId": str, "updatedAt": str}
 PREF_FILE = DATA_DIR / "user_preferences.json"
 
@@ -84,8 +113,7 @@ def save_user_preference(user_id: int, tenant_id: str, clinic_id: str):
         "updatedAt": datetime.now().isoformat()
     }
     try:
-        with open(PREF_FILE, "w", encoding="utf-8") as f:
-            json.dump(prefs, f, ensure_ascii=False, indent=2)
+        save_json_atomic(PREF_FILE, prefs)
     except Exception as e:
         logging.error(f"Error saving user preference: {e}")
 
@@ -278,6 +306,9 @@ async def handle_my_appointments(message: types.Message):
 
     await message.answer(f"📋 <b>Sizning faol qabullaringiz ({len(appts)} ta):</b>", parse_mode=ParseMode.HTML)
 
+    clinics = get_all_clinics()
+    clinic_map = {c.get("id"): c.get("name", "Filial") for c in clinics}
+
     for a in appts:
         appt_id = a.get("id", "MED-000")
         pin = a.get("pinCode", "0000")
@@ -286,7 +317,7 @@ async def handle_my_appointments(message: types.Message):
         date = a.get("date", "")
         time = a.get("time", "")
         clinic_id = a.get("clinicId", "dentamed-nukus")
-        clinic_label = "DentaMed Nukus Bosh filiali" if "nukus" in clinic_id else "DentaMed Chilonzor filiali"
+        clinic_label = clinic_map.get(clinic_id, "DentaMed Filiali")
 
         card = (
             f"🎫 <b>QABUL TALONI:</b> <code>#{appt_id}</code>\n"
@@ -652,28 +683,53 @@ async def handle_webapp_data(message: types.Message, bot: Bot):
 @dp.callback_query(F.data == "view_doctors")
 async def handle_view_doctors(callback: types.CallbackQuery):
     await callback.answer()
-    doctors_msg = (
-        "👨‍⚕️ <b>DentaMed Yetakchi Shifokorlari:</b>\n\n"
-        "🏥 <b>Nukus Bosh Filiali:</b>\n"
-        "1. <b>Dr. Jamshid Rustamov</b>\n"
-        "   • Bosh Stomatolog-Implantolog (12 yil tajriba)\n"
-        "   • Shveysariya Straumann va Osstem implantlari\n\n"
-        "2. <b>Dr. Shahlo Karimova</b>\n"
-        "   • Ortodont — Breket & Invisalign eylayner (9 yil tajriba)\n\n"
-        "🏥 <b>Chilonzor Filiali:</b>\n"
-        "3. <b>Dr. Bobur Mahmudov</b>\n"
-        "   • Oliy toifali LOR-Jarroh (15 yil tajriba)\n"
-        "   • Gaymorit va burun bitishini endoskopik davolash\n\n"
-        "4. <b>Dr. Dilnoza Alimova</b>\n"
-        "   • Bolalar LOR shifokori & Audiolog (8 yil tajriba)\n\n"
-        "👇 <i>Qabulga yozilish uchun pastdagi tugmani bosing:</i>"
-    )
+    user_id = callback.from_user.id
+    pref = get_user_preference(user_id)
+    user_clinic_id = pref.get("clinicId") if pref else None
+
+    docs = get_all_doctors()
+    clinics = get_all_clinics()
+    clinic_map = {c.get("id"): c.get("name", "Filial") for c in clinics}
+
+    if not docs:
+        doctors_msg = "👨‍⚕️ Hozirda shifokorlar ro'yxati yangilanmoqda. Iltimos, Mini App orqali ko'ring."
+    else:
+        lines = ["👨‍⚕️ <b>Klinikamiz Yetakchi Shifokorlari:</b>\n"]
+        filtered_docs = docs
+        if user_clinic_id:
+            matched = [
+                d for d in docs
+                if not d.get("clinicIds")
+                or user_clinic_id in d.get("clinicIds", [])
+                or d.get("clinicId") == user_clinic_id
+                or d.get("branch") == user_clinic_id.replace("dentamed-", "").replace("grandmed-", "")
+            ]
+            if matched:
+                filtered_docs = matched
+
+        for idx, doc in enumerate(filtered_docs[:6], 1):
+            name = doc.get("name", "Shifokor")
+            spec_obj = doc.get("specialty", {})
+            spec = spec_obj.get("uz") if isinstance(spec_obj, dict) else (spec_obj or "Mutaxassis")
+            exp = doc.get("experience", 5)
+            c_id = doc.get("clinicId") or (doc.get("clinicIds", [""])[0] if doc.get("clinicIds") else "")
+            c_name = clinic_map.get(c_id, "")
+            c_str = f" <i>({c_name})</i>" if c_name else ""
+            lines.append(f"{idx}. <b>{name}</b>{c_str}\n   • {spec} • {exp} yil tajriba")
+
+        lines.append("\n👇 <i>Qabulga yozilish uchun pastdagi tugmani bosing:</i>")
+        doctors_msg = "\n".join(lines)
+
+    patient_url = WEBAPP_URL
+    if user_clinic_id and pref:
+        patient_url = f"{WEBAPP_URL}?view=patient&tenant={pref.get('tenantId', DEFAULT_TENANT_ID)}&clinic={user_clinic_id}"
+
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
                     text="🦷 Shifokorga Yozilish (Mini App)",
-                    web_app=WebAppInfo(url=WEBAPP_URL)
+                    web_app=WebAppInfo(url=patient_url)
                 )
             ]
         ]
@@ -738,8 +794,7 @@ async def handle_reminder_confirm(callback: types.CallbackQuery):
                     updated = True
                     break
             if updated:
-                with open(appointments_file, "w", encoding="utf-8") as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
+                save_json_atomic(appointments_file, data)
     except Exception as e:
         logging.error(f"Error updating appointment status to confirmed: {e}")
 
@@ -774,8 +829,7 @@ async def handle_reminder_cancel(callback: types.CallbackQuery):
                     patient_name = a.get("patientName", "")
                     phone = a.get("phone", "")
                     break
-            with open(appointments_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            save_json_atomic(appointments_file, data)
     except Exception as e:
         logging.error(f"Error cancelling appointment: {e}")
 
@@ -813,6 +867,13 @@ async def handle_reminder_cancel(callback: types.CallbackQuery):
 @dp.callback_query(F.data.startswith("rem_resched_"))
 async def handle_reminder_reschedule(callback: types.CallbackQuery):
     await callback.answer("🔄 Yangi vaqt tanlash")
+    user_id = callback.from_user.id
+    pref = get_user_preference(user_id)
+    user_clinic_id = pref.get("clinicId") if pref else None
+    patient_url = WEBAPP_URL
+    if user_clinic_id and pref:
+        patient_url = f"{WEBAPP_URL}?view=patient&tenant={pref.get('tenantId', DEFAULT_TENANT_ID)}&clinic={user_clinic_id}"
+
     appt_id = callback.data.replace("rem_resched_", "")
     resched_text = (
         f"🔄 <b>QABUL VAQTINI KO'CHIRISH</b>\n\n"
@@ -826,7 +887,7 @@ async def handle_reminder_reschedule(callback: types.CallbackQuery):
             [
                 InlineKeyboardButton(
                     text="📅 Yangi Vaqtni Tanlash (Mini App)",
-                    web_app=WebAppInfo(url=WEBAPP_URL)
+                    web_app=WebAppInfo(url=patient_url)
                 )
             ]
         ]
