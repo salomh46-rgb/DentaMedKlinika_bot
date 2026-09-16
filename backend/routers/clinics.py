@@ -3,6 +3,9 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime, timezone, timedelta
 import os
+import time
+import re
+import httpx
 import server
 from server import *
 
@@ -159,6 +162,109 @@ def staff_login(payload: StaffLoginModel, request: Request):
 
     record_failed_login(client_ip)
     raise HTTPException(status_code=401, detail="Noto'g'ri PIN-kod! Qayta urinib ko'ring.")
+
+class RecoverPinTelegramModel(BaseModel):
+    phone: str = Field(..., min_length=9, max_length=25, description="Xodim telefon raqami")
+
+RECOVER_PIN_RATE_LIMIT: Dict[str, list] = {}
+
+@router.post("/api/staff/recover-pin-telegram")
+async def recover_pin_via_telegram(payload: RecoverPinTelegramModel, request: Request):
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    
+    # Rate limit: max 3 requests per IP per minute
+    ip_history = [t for t in RECOVER_PIN_RATE_LIMIT.get(client_ip, []) if now - t < 60]
+    if len(ip_history) >= 3:
+        raise HTTPException(status_code=429, detail="Juda ko'p so'rov. Iltimos, 1 daqiqa kuting.")
+    ip_history.append(now)
+    RECOVER_PIN_RATE_LIMIT[client_ip] = ip_history
+
+    clean_digits = re.sub(r"\D", "", payload.phone)
+    if len(clean_digits) < 9:
+        raise HTTPException(status_code=400, detail="Telefon raqami noto'g'ri kiritildi.")
+
+    tenants = load_json_file(TENANTS_FILE)
+    clinics = load_json_file(CLINICS_FILE)
+
+    found_info = None
+
+    # 1. Search in Tenants (Owners)
+    for t in tenants:
+        t_phone_digits = re.sub(r"\D", "", str(t.get("phone", "")))
+        if t_phone_digits and (clean_digits.endswith(t_phone_digits[-9:]) or t_phone_digits.endswith(clean_digits[-9:])):
+            found_info = {
+                "name": t.get("ownerName", "Klinika Rahbari"),
+                "role": "👑 Klinika Rahbari (CEO)",
+                "facility": t.get("name", "DentaMed"),
+                "pin": t.get("ownerPin", "Mavjud")
+            }
+            break
+
+    # 2. Search in Clinics (Managers / Reception)
+    if not found_info:
+        for c in clinics:
+            c_phone_digits = re.sub(r"\D", "", str(c.get("phone", "")))
+            if c_phone_digits and (clean_digits.endswith(c_phone_digits[-9:]) or c_phone_digits.endswith(clean_digits[-9:])):
+                found_info = {
+                    "name": c.get("managerName", "Filial Retsepshni"),
+                    "role": "📍 Filial Retsepshn Xodimi",
+                    "facility": c.get("name", "Filial"),
+                    "pin": c.get("staffPin", "Mavjud")
+                }
+                break
+
+    # 3. Send Telegram Notification to Admin Group & Bot
+    bot_token = os.getenv("BOT_TOKEN", "")
+    admin_chat = os.getenv("ADMIN_CHAT_ID", "")
+    sent_telegram = False
+
+    if bot_token and admin_chat:
+        tashkent_time = (datetime.now(timezone.utc) + timedelta(hours=5)).strftime("%Y-%m-%d %H:%M:%S")
+        if found_info:
+            tg_text = (
+                f"🔑 <b>XODIM PIN-KOD TIKLASH SO'ROVI (TASDIQLANDI)</b>\n"
+                f"────────────────────────\n"
+                f"👤 <b>Xodim:</b> {found_info['name']}\n"
+                f"💼 <b>Lavozim:</b> {found_info['role']}\n"
+                f"🏥 <b>Klinika/Filial:</b> {found_info['facility']}\n"
+                f"📞 <b>Telefon:</b> <code>+{clean_digits}</code>\n"
+                f"🔢 <b>KIRISH PIN-KODI:</b> <code>{found_info['pin']}</code>\n"
+                f"🕒 <b>Vaqt:</b> {tashkent_time}\n"
+                f"────────────────────────\n"
+                f"✅ <i>Tizim xodimni aniqladi va ma'lumotni yetkazdi.</i>"
+            )
+        else:
+            tg_text = (
+                f"⚠️ <b>NOTO'G'RI RAQAMDAN PIN SO'ROVI</b>\n"
+                f"────────────────────────\n"
+                f"📞 <b>Kiritilgan raqam:</b> <code>+{clean_digits}</code>\n"
+                f"🌐 <b>IP manzil:</b> <code>{client_ip}</code>\n"
+                f"🕒 <b>Vaqt:</b> {tashkent_time}\n"
+                f"ℹ️ <i>Ushbu raqam xodimlar bazasida topilmadi. Agar bu yangi xodim bo'lsa, unga PIN taqdim eting.</i>"
+            )
+
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                res = await client.post(
+                    f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                    json={
+                        "chat_id": admin_chat,
+                        "text": tg_text,
+                        "parse_mode": "HTML"
+                    }
+                )
+                if res.is_success:
+                    sent_telegram = True
+        except Exception as e:
+            print(f"Telegram notification error: {e}")
+
+    return {
+        "ok": True,
+        "sent_telegram": sent_telegram,
+        "messageUz": "✅ So'rovingiz Telegram orqali qabul qilindi! Klinika boshqaruv Telegram guruhiga va botiga ma'lumot yetkazildi.",
+        "messageRu": "✅ Запрос отправлен в Telegram! Администрация клиники получила уведомление."
+    }
 
 @router.post("/api/tenants/register")
 def register_tenant(payload: TenantRegisterModel):

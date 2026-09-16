@@ -159,3 +159,20 @@ def test_booking_allowed_after_previous_cancelled_or_completed():
     r2 = client.post("/api/appointments", json=appt_2)
     assert r2.status_code == 200
     assert r2.json()["status"] == "success"
+
+def test_recover_pin_telegram_endpoint():
+    """Telegram orqali PIN tiklash so'rovi muvaffaqiyatli qabul qilinishi"""
+    client = TestClient(app)
+    # 1. Mavjud raqam (+998 71 200-00-00)
+    res1 = client.post("/api/staff/recover-pin-telegram", json={"phone": "+998712000000"})
+    assert res1.status_code == 200
+    assert res1.json()["ok"] is True
+
+    # 2. Noma'lum raqam (xavfsiz javob)
+    res2 = client.post("/api/staff/recover-pin-telegram", json={"phone": "+998901112233"})
+    assert res2.status_code == 200
+    assert res2.json()["ok"] is True
+
+    # 3. Noto'g'ri/juda qisqa raqam
+    res3 = client.post("/api/staff/recover-pin-telegram", json={"phone": "123"})
+    assert res3.status_code in [400, 422]

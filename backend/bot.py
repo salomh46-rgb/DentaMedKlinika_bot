@@ -607,6 +607,103 @@ async def handle_contact(message: types.Message):
 
     await message.answer(contact_text, parse_mode=ParseMode.HTML)
 
+# ==========================================
+# STAFF PIN RECOVERY VIA TELEGRAM
+# ==========================================
+@dp.message(Command("pin"))
+@dp.message(F.text.in_(["🔑 Xodim PIN-kodi", "🔑 PIN-kodni olish", "PIN"]))
+async def handle_request_staff_pin(message: types.Message):
+    contact_kb = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📱 Telefon raqamimni yuborish", request_contact=True)],
+            [KeyboardButton(text="🔙 Bosh menyuga qaytish")]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+    prompt_text = (
+        "🔐 <b>XODIM / SHIFOKOR PIN-KODINI TIKLASH</b>\n\n"
+        "Klinika CRM tizimiga kirish PIN-kodingizni olish uchun "
+        "pastdagi <b>«📱 Telefon raqamimni yuborish»</b> tugmasini bosing yoki telefon raqamingizni yozib yuboring:\n\n"
+        "<i>(Tizim sizning raqamingizni klinika xodimlari ro'yxatidan tekshirib, shaxsiy PIN-kodingizni taqdim etadi)</i>"
+    )
+    await message.answer(prompt_text, parse_mode=ParseMode.HTML, reply_markup=contact_kb)
+
+@dp.message(F.contact)
+async def handle_staff_contact_pin(message: types.Message, bot: Bot):
+    user_id = message.from_user.id
+    phone = message.contact.phone_number
+    clean_digits = re.sub(r"\D", "", phone)
+
+    tenants = get_all_tenants()
+    clinics = get_all_clinics()
+
+    found_info = None
+
+    # Check Tenants (Owners)
+    for t_id, t in tenants.items():
+        t_digits = re.sub(r"\D", "", str(t.get("phone", "")))
+        if t_digits and (clean_digits.endswith(t_digits[-9:]) or t_digits.endswith(clean_digits[-9:])):
+            found_info = {
+                "name": t.get("ownerName", "Klinika Rahbari"),
+                "role": "👑 Klinika Rahbari (CEO)",
+                "facility": t.get("name", "DentaMed"),
+                "pin": t.get("ownerPin", "Mavjud")
+            }
+            break
+
+    # Check Clinics (Managers / Reception)
+    if not found_info:
+        for c in clinics:
+            c_digits = re.sub(r"\D", "", str(c.get("phone", "")))
+            if c_digits and (clean_digits.endswith(c_digits[-9:]) or c_digits.endswith(clean_digits[-9:])):
+                found_info = {
+                    "name": c.get("managerName", "Filial Retsepshni"),
+                    "role": "📍 Filial Retsepshn Xodimi",
+                    "facility": c.get("name", "Filial"),
+                    "pin": c.get("staffPin", "Mavjud")
+                }
+                break
+
+    pref = get_user_preference(user_id)
+    tenant_id = pref.get("tenantId", DEFAULT_TENANT_ID) if pref else DEFAULT_TENANT_ID
+    clinic_id = pref.get("clinicId") if pref else (clinics[0]["id"] if clinics else "dentamed-nukus")
+    patient_webapp_url = f"{WEBAPP_URL}?view=patient&tenant={tenant_id}&clinic={clinic_id}"
+    restore_kb = get_main_keyboard(patient_webapp_url)
+
+    if found_info:
+        msg = (
+            f"🎉 <b>Xush kelibsiz, {found_info['name']}!</b>\n"
+            f"────────────────────────\n"
+            f"💼 <b>Lavozim:</b> {found_info['role']}\n"
+            f"🏥 <b>Klinika/Filial:</b> {found_info['facility']}\n\n"
+            f"🔑 <b>SIZNING KIRISH PIN-KODINGIZ:</b> <code>{found_info['pin']}</code>\n"
+            f"────────────────────────\n"
+            f"ℹ️ <i>Ushbu PIN-kodni Web CRM portali yoki Mini App kirish oynasiga kiritishingiz mumkin. "
+            f"Xavfsizlik maqsadida kodni begonalarga bermang.</i>"
+        )
+        await message.answer(msg, parse_mode=ParseMode.HTML, reply_markup=restore_kb)
+
+        # Notify admin group for security audit
+        if ADMIN_CHAT_ID:
+            try:
+                await bot.send_message(
+                    chat_id=ADMIN_CHAT_ID,
+                    text=f"🔔 <b>XODIM TELEGRAM ORQALI PIN-KODINI OLDIB OLDI:</b>\n👤 {found_info['name']} ({found_info['facility']})\n📞 Tel: +{clean_digits}\n🔑 PIN: {found_info['pin']}",
+                    parse_mode=ParseMode.HTML
+                )
+            except Exception:
+                pass
+    else:
+        msg = (
+            f"⚠️ <b>Telefon raqami topilmadi (+{clean_digits})</b>\n\n"
+            f"Hurmatli xodim, ushbu telefon raqami klinika xodimlari ro'yxatida mavjud emas. "
+            f"Iltimos, klinika bosh shifokori yoki ma'muri bilan bog'laning:\n\n"
+            f"📞 <b>Ma'muriyat:</b> +998 (71) 200-00-00\n"
+            f"💬 <b>Telegram:</b> @dentamed_admin"
+        )
+        await message.answer(msg, parse_mode=ParseMode.HTML, reply_markup=restore_kb)
+
 # Handle Data received from Telegram Mini App (sendData)
 @dp.message(F.web_app_data)
 async def handle_webapp_data(message: types.Message, bot: Bot):
