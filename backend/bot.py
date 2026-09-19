@@ -45,6 +45,23 @@ dp = Dispatcher()
 DATA_DIR = Path(__file__).resolve().parent / "data"
 
 def get_all_tenants() -> dict:
+    # 1. Try Supabase Live Sync
+    try:
+        import httpx
+        url = "http://supabasekong-hpuzpikkxuolobd2zwkpcepk.62.171.143.55.sslip.io/rest/v1/tenants?select=*"
+        headers = {
+            "apikey": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc4OTcxMDQyMCwiZXhwIjo0OTQ1Mzg0MDIwLCJyb2xlIjoiYW5vbiJ9.s2Tm88Uoi2pDHoZgK-1qMqji07mgEFd9-qe86YvrRfs",
+            "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc4OTcxMDQyMCwiZXhwIjo0OTQ1Mzg0MDIwLCJyb2xlIjoiYW5vbiJ9.s2Tm88Uoi2pDHoZgK-1qMqji07mgEFd9-qe86YvrRfs"
+        }
+        resp = httpx.get(url, headers=headers, timeout=1.5)
+        if resp.status_code == 200:
+            db_data = resp.json()
+            if db_data:
+                return {t["id"]: t for t in db_data if "id" in t}
+    except Exception:
+        pass
+
+    # 2. Local Fallback
     fpath = DATA_DIR / "tenants.json"
     if fpath.exists():
         try:
@@ -56,6 +73,54 @@ def get_all_tenants() -> dict:
     return {}
 
 def get_all_clinics() -> list:
+    # Default coordinates map for realistic GPS pins
+    known_locations = {
+        "dentamed-nukus": {"lat": 41.2995, "lng": 69.2401},
+        "nukus": {"lat": 41.2995, "lng": 69.2401},
+        "dentamed-chilonzor": {"lat": 41.2858, "lng": 69.2042},
+        "chilonzor": {"lat": 41.2858, "lng": 69.2042},
+        "dentamed-yunusobod": {"lat": 41.3542, "lng": 69.2881},
+        "yunusobod": {"lat": 41.3542, "lng": 69.2881},
+        "dentamed-samarqand": {"lat": 39.6542, "lng": 66.9597},
+        "samarkand": {"lat": 39.6542, "lng": 66.9597},
+        "dentamed-buxoro": {"lat": 39.7747, "lng": 64.4286},
+        "bukhara": {"lat": 39.7747, "lng": 64.4286},
+        "grandmed-markaziy": {"lat": 41.3111, "lng": 69.2452},
+        "grandmed-sergeli": {"lat": 41.2215, "lng": 69.2189},
+    }
+
+    # 1. Try Supabase Live Sync
+    try:
+        import httpx
+        url = "http://supabasekong-hpuzpikkxuolobd2zwkpcepk.62.171.143.55.sslip.io/rest/v1/clinics?select=*"
+        headers = {
+            "apikey": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc4OTcxMDQyMCwiZXhwIjo0OTQ1Mzg0MDIwLCJyb2xlIjoiYW5vbiJ9.s2Tm88Uoi2pDHoZgK-1qMqji07mgEFd9-qe86YvrRfs",
+            "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc4OTcxMDQyMCwiZXhwIjo0OTQ1Mzg0MDIwLCJyb2xlIjoiYW5vbiJ9.s2Tm88Uoi2pDHoZgK-1qMqji07mgEFd9-qe86YvrRfs"
+        }
+        resp = httpx.get(url, headers=headers, timeout=1.5)
+        if resp.status_code == 200:
+            db_data = resp.json()
+            if db_data:
+                res = []
+                for c in db_data:
+                    cid = c["id"]
+                    loc = known_locations.get(cid, {"lat": 41.2995, "lng": 69.2401})
+                    res.append({
+                        "id": cid,
+                        "tenantId": c.get("tenant_id") or "dentamed",
+                        "name": c.get("name"),
+                        "address": c.get("address_uz") or c.get("name"),
+                        "landmark": c.get("landmark_uz", "-"),
+                        "phone": c.get("phone", "+998 (71) 200-00-00"),
+                        "workingHours": c.get("working_hours_uz", "Har kuni"),
+                        "location": loc,
+                        "mapUrl": f"https://maps.google.com/?q={loc['lat']},{loc['lng']}"
+                    })
+                return res
+    except Exception:
+        pass
+
+    # 2. Local Fallback
     fpath = DATA_DIR / "clinics.json"
     if fpath.exists():
         try:
@@ -138,10 +203,31 @@ async def cleanup_user_preview(chat_id: int, user_id: int, bot: Bot):
                 pass
         preview_tracker[user_id] = []
 
-def get_branch_selection_keyboard(clinics: list) -> InlineKeyboardMarkup:
-    """List of branches as neat clickable options (2-rasm uslubida toza tanlov)"""
+def get_tenant_selection_keyboard() -> InlineKeyboardMarkup:
+    """Stage 1: Clean list of Clinic Chains / Brands"""
+    tenants = get_all_tenants()
+    clinics = get_all_clinics()
     buttons = []
-    for c in clinics:
+    
+    for t_id, t_data in tenants.items():
+        t_name = t_data.get("name", "Klinika")
+        branch_count = len([c for c in clinics if c.get("tenantId", "dentamed") == t_id])
+        count_str = f" ({branch_count} ta filial)" if branch_count > 0 else ""
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"🏥 {t_name}{count_str} ➡️",
+                callback_data=f"select_tenant_{t_id}"
+            )
+        ])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def get_tenant_branches_keyboard(tenant_id: str) -> InlineKeyboardMarkup:
+    """Stage 2: Branches strictly belonging to the chosen Clinic Chain"""
+    clinics = get_all_clinics()
+    tenant_clinics = [c for c in clinics if c.get("tenantId", "dentamed") == tenant_id]
+    
+    buttons = []
+    for c in tenant_clinics:
         c_id = c.get("id")
         c_name = c.get("name", "Filial")
         buttons.append([
@@ -150,7 +236,18 @@ def get_branch_selection_keyboard(clinics: list) -> InlineKeyboardMarkup:
                 callback_data=f"preview_branch_{c_id}"
             )
         ])
+    
+    # Back button to return to Clinic Chains
+    buttons.append([
+        InlineKeyboardButton(
+            text="🔙 Boshqa klinikalarni ko'rish",
+            callback_data="show_tenant_list"
+        )
+    ])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def get_branch_selection_keyboard(clinics: list) -> InlineKeyboardMarkup:
+    return get_tenant_selection_keyboard()
 
 def get_main_keyboard(webapp_url: str, clinic_name: str = "") -> ReplyKeyboardMarkup:
     """Bottom persistent menu with WebApp button"""
@@ -344,6 +441,39 @@ async def handle_my_appointments(message: types.Message):
 # BRANCH PREVIEW, CLEANUP, SELECTION & LOCKING WORKFLOW (Single-Bot White-Label)
 # =========================================================================
 
+@dp.callback_query(F.data.startswith("select_tenant_"))
+async def handle_select_tenant(callback: types.CallbackQuery, bot: Bot):
+    tenant_id = callback.data.replace("select_tenant_", "")
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+    await cleanup_user_preview(chat_id, user_id, bot)
+
+    tenants = get_all_tenants()
+    tenant_data = tenants.get(tenant_id, {})
+    tenant_name = tenant_data.get("name", "Klinika")
+
+    text = f"🏥 <b>{tenant_name}</b> filiallari:\n\n<i>Qabulga yozilish uchun o'zingizga qulay filialni tanlang:\n(Xaritasi va aniq joylashuvini ko'rish uchun filial ustiga bosing)</i>"
+    kb = get_tenant_branches_keyboard(tenant_id)
+    try:
+        await callback.message.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=kb)
+    except Exception:
+        await callback.message.answer(text, parse_mode=ParseMode.HTML, reply_markup=kb)
+    await callback.answer()
+
+@dp.callback_query(F.data == "show_tenant_list")
+async def handle_show_tenant_list(callback: types.CallbackQuery, bot: Bot):
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+    await cleanup_user_preview(chat_id, user_id, bot)
+
+    text = "🏥 <b>Qabulga yozilish uchun klinika tarmog'ini tanlang:</b>\n<i>(Klinikani tanlab, uning filiallari va xaritasini ko'rishingiz mumkin)</i>"
+    kb = get_tenant_selection_keyboard()
+    try:
+        await callback.message.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=kb)
+    except Exception:
+        await callback.message.answer(text, parse_mode=ParseMode.HTML, reply_markup=kb)
+    await callback.answer()
+
 @dp.callback_query(F.data.startswith("preview_branch_"))
 async def handle_preview_branch(callback: types.CallbackQuery, bot: Bot):
     user_id = callback.from_user.id
@@ -386,12 +516,14 @@ async def handle_preview_branch(callback: types.CallbackQuery, bot: Bot):
             ],
             [
                 InlineKeyboardButton(
-                    text="🔙 Boshqa filialni ko'rish",
-                    callback_data="back_to_branches"
-                ),
+                    text="🔙 Filiallar ro'yxatiga qaytish",
+                    callback_data=f"select_tenant_{tenant_id}"
+                )
+            ],
+            [
                 InlineKeyboardButton(
-                    text="❌ Bekor qilish",
-                    callback_data="cancel_preview"
+                    text="🏢 Boshqa klinika tanlash",
+                    callback_data="show_tenant_list"
                 )
             ]
         ]
@@ -725,6 +857,32 @@ async def handle_webapp_data(message: types.Message, bot: Bot):
         time = data.get("time", "")
         notes = data.get("notes", "Yo'q")
         
+        # 0. Persist to appointments.json database atomically
+        appointments_file = Path(__file__).parent / "data" / "appointments.json"
+        data["telegramUserId"] = message.from_user.id
+        data["telegramUsername"] = message.from_user.username
+        data["status"] = data.get("status") or "confirmed"
+        data["tenantId"] = data.get("tenantId") or "dentamed"
+        data["createdAt"] = data.get("createdAt") or datetime.now().isoformat()
+
+        all_appts = []
+        if appointments_file.exists():
+            try:
+                with open(appointments_file, "r", encoding="utf-8") as f:
+                    all_appts = json.load(f)
+            except Exception as e:
+                logging.error(f"Error reading appointments in web_app_data: {e}")
+                all_appts = []
+
+        existing_idx = next((i for i, a in enumerate(all_appts) if a.get("id") == appointment_id), None)
+        if existing_idx is not None:
+            all_appts[existing_idx] = data
+        else:
+            all_appts.insert(0, data)
+
+        save_json_atomic(appointments_file, all_appts)
+        logging.info(f"✅ WebApp appointment saved: {appointment_id} for user {message.from_user.id}")
+
         # 1. Send confirmation ticket to the patient
         patient_receipt = (
             f"🎉 <b>QABULINGIZ MUVAFFAQIYATLI TASDIQLANDI!</b>\n"

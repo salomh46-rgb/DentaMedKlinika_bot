@@ -236,14 +236,51 @@ export function App() {
     return [];
   });
 
-  // Keep localStorage in sync per user
+  // Keep localStorage & Telegram CloudStorage in sync across PC and mobile devices
+  useEffect(() => {
+    const cloud = window.Telegram?.WebApp?.CloudStorage;
+    if (cloud && tgUser?.id) {
+      cloud.getItem(storageKey, (err, cloudVal) => {
+        if (!err && cloudVal) {
+          try {
+            const cloudAppts: Appointment[] = JSON.parse(cloudVal);
+            if (Array.isArray(cloudAppts) && cloudAppts.length > 0) {
+              setAppointments(prev => {
+                const map = new Map<string, Appointment>();
+                cloudAppts.forEach(a => map.set(a.id, a));
+                prev.forEach(a => map.set(a.id, a));
+                return Array.from(map.values()).sort(
+                  (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+                );
+              });
+            }
+          } catch (e) {
+            console.log('CloudStorage parse error:', e);
+          }
+        }
+      });
+    }
+  }, [storageKey, tgUser?.id]);
+
+  // Keep localStorage and CloudStorage in sync per user
   useEffect(() => {
     try {
       localStorage.setItem(storageKey, JSON.stringify(appointments));
     } catch (e) {
       console.log('Error saving appointments:', e);
     }
-  }, [appointments, storageKey]);
+
+    const cloud = window.Telegram?.WebApp?.CloudStorage;
+    if (cloud && tgUser?.id) {
+      try {
+        cloud.setItem(storageKey, JSON.stringify(appointments), (err) => {
+          if (err) console.log('Error saving to CloudStorage:', err);
+        });
+      } catch (e) {
+        console.log('CloudStorage setItem error:', e);
+      }
+    }
+  }, [appointments, storageKey, tgUser?.id]);
 
   const [isBookingOpen, setIsBookingOpen] = useState<boolean>(false);
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);

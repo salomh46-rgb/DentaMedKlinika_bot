@@ -16,6 +16,14 @@ interface Window {
         selectionChanged: () => void;
       };
       initData?: string;
+      CloudStorage?: {
+        setItem: (key: string, value: string, callback?: (error: any, result?: boolean) => void) => void;
+        getItem: (key: string, callback: (error: any, result?: string) => void) => void;
+        getItems: (keys: string[], callback: (error: any, result?: Record<string, string>) => void) => void;
+        removeItem: (key: string, callback?: (error: any, result?: boolean) => void) => void;
+        removeItems: (keys: string[], callback?: (error: any, result?: boolean) => void) => void;
+        getKeys: (callback: (error: any, result?: string[]) => void) => void;
+      };
       initDataUnsafe?: {
         user?: {
           id: number;
